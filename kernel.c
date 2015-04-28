@@ -16,7 +16,7 @@ int active_task = KERNEL_TASK;
 int task_count = 0;
 
 task_t tasks[MAX_TASKS];
-context_t savedContext;
+context_t * savedContext;
 context_t kernelContext;
 
 void kernel_main(void)
@@ -27,8 +27,8 @@ void kernel_main(void)
     for (int i = 0; i < task_count; ++i)
     {
       active_task = i;
+      savedContext = &tasks[i].context;
       ContextSwitch(&tasks[i].context);
-      memcpy(&tasks[i].context, &savedContext, sizeof(tasks[i].context));
     }
   }
 }

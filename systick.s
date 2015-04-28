@@ -190,6 +190,7 @@ SysTick_Handler:
   ; Save the task context
   MRS R0, PSP
   LDR R1, =savedContext
+  LDR R1, [R1]
   BL SaveContext
   
   ; Discard exception entry context saved on the process stack and save xPSR

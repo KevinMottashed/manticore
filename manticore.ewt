@@ -2109,10 +2109,19 @@
     </settings>
   </configuration>
   <file>
+    <name>$PROJ_DIR$\context.s</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\kernel.c</name>
   </file>
   <file>
     <name>$PROJ_DIR$\main.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\syscall.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\syscall_isr.s</name>
   </file>
   <file>
     <name>$PROJ_DIR$\systick.s</name>

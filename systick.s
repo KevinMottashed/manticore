@@ -11,7 +11,7 @@
 SysTick_Handler:
   ; The systick handler only needs to save to save the current context
   ; and then let the kernel take over.
-  BL SaveContext  
+  BL SaveContext
   B RestoreKernel  
   
   END

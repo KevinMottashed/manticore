@@ -2,6 +2,7 @@
 #include "system.h"
 #include "task.h"
 #include "kernel.h"
+#include "syscall.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -15,7 +16,11 @@ void task1(void * arg)
   while (true)
   {
     for (int i = 0; i < 0x10000; ++i)
-    {    
+    {
+      if (i & 0xFF == 0)
+      {
+        yield();
+      }
     }
   }
 }

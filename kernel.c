@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-void ContextSwitch(context_t * context);
+void ContextSwitch(volatile context_t * context);
 
 #define KERNEL_TASK -1
 #define MAX_TASKS    2
@@ -15,8 +15,8 @@ void ContextSwitch(context_t * context);
 int active_task = KERNEL_TASK;
 int task_count = 0;
 
-task_t tasks[MAX_TASKS];
-context_t * savedContext;
+volatile task_t tasks[MAX_TASKS];
+volatile context_t * savedContext;
 context_t kernelContext;
 
 void kernel_main(void)

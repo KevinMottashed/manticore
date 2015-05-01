@@ -3,6 +3,7 @@
   PUBLIC SaveContext
   PUBLIC ContextSwitch
   PUBLIC RestoreKernel
+  PUBLIC isr_exit_to_kernel
     
   IMPORT savedContext
   IMPORT kernelContext
@@ -144,6 +145,10 @@ ContextSwitch:
   MOV R2, LR
   STR R2, [R1,#SAVED_PC_OFFSET]
   
+  ; Save xPSR
+  MRS R2, PSR
+  STR R2, [R1,#SAVED_xPSR_OFFSET]
+  
   ; Restore task context 
   ; Restore R3 - R7
   LDR R3, [R0,#SAVED_R3_OFFSET]
@@ -172,6 +177,10 @@ ContextSwitch:
   LDR R2, [R0,#SAVED_SP_OFFSET]
   MSR PSP, R2
   
+  ; Restore xPSR
+  LDR R2, [R0,#SAVED_xPSR_OFFSET]
+  MSR PSR, R2
+  
   ; Switch to the process stack
   MOVS R2, #0x2
   MSR CONTROL, R2
@@ -197,11 +206,11 @@ RestoreKernel:
   ; R1 - R2 = work area
   LDR R0, =kernelContext
   
-  ; Save xPSR from the process stack
-  MRS R1, PSP
-  MOVS R2, #0x1C
-  ADD R1, R1, R2
-  LDR R1, [R1]
+  ; Restore xPSR
+  LDR R1, [R0,#SAVED_xPSR_OFFSET]
+  MOVS R2, #1
+  LSLS R2, R2, #24
+  ORRS R1, R1, R2
   PUSH {R1}
   
   ; Restore PC

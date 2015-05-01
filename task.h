@@ -3,6 +3,13 @@
 
 #include <stdint.h>
 
+typedef enum task_state_e
+{
+  STATE_RUNNING,
+  STATE_READY,
+  STATE_SLEEP,
+} task_state_t;
+
 // Warning: Member offsets are used in systick.s
 typedef struct context_s
 {
@@ -16,7 +23,12 @@ typedef struct context_s
 typedef struct task_s
 {
   context_t context;
-  uint32_t stack[256/sizeof(uint32_t)]; // 256 bytes of stack for tasks
+  task_state_t state;
+  unsigned int sleep;
+  
+  // 256 bytes of stack for tasks.
+  // uint64_t is used to ensure 8-byte alignment.
+  uint64_t stack[256/sizeof(uint64_t)];
 } task_t;
 
 #endif

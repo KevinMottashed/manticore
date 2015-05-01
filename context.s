@@ -50,8 +50,6 @@ SaveContext:
   ; R0 = Stack pointer on exception entry
   ; R1 = Memory where the context will be saved
   ; R2 = Work area
-  PUSH {R0,R1,R2,LR}
-
   MRS R0, PSP
   LDR R1, =savedContext
   LDR R1, [R1]
@@ -100,7 +98,7 @@ SaveContext:
   ADD R0, R0, R2
   STR R0, [R1,#SAVED_SP_OFFSET]
 
-  POP {R0,R1,R2,PC}
+  BX LR
   
 ; Switch from the kernel to a task
 ; void ContextSwitch(volatile context_t * context)

@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define MIN_PRIORITY (0)
+#define MAX_PRIORITY (255)
+
 typedef enum task_state_e
 {
   STATE_RUNNING,
@@ -25,6 +28,7 @@ typedef struct task_s
   context_t context;
   task_state_t state;
   unsigned int sleep;
+  uint8_t priority;
   
   // 256 bytes of stack for tasks.
   // uint64_t is used to ensure 8-byte alignment.

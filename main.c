@@ -7,11 +7,13 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include <assert.h>
 
 void task1(void * arg);
 void task2(void * arg);
 void task3(void * arg);
 void task4(void * arg);
+void task5(void * arg);
 
 void task1(void * arg)
 {
@@ -55,12 +57,19 @@ void task4(void * arg)
   }
 }
 
+void task5(void * arg)
+{
+  // This task should never be scheduled due to its low priority.
+  assert(false);
+}
+
 int main()
 {
   hardware_init();
-  kernel_create_task(&task1);
-  kernel_create_task(&task2);
-  kernel_create_task(&task3);
-  kernel_create_task(&task4);
+  kernel_create_task(&task1, 10);
+  kernel_create_task(&task2, 11);
+  kernel_create_task(&task3, 15);
+  kernel_create_task(&task4, 20);
+  kernel_create_task(&task5, 5);
   kernel_main();
 }

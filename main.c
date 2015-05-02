@@ -3,6 +3,7 @@
 #include "task.h"
 #include "kernel.h"
 #include "syscall.h"
+#include "hardware.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -56,6 +57,7 @@ void task4(void * arg)
 
 int main()
 {
+  hardware_init();
   kernel_create_task(&task1);
   kernel_create_task(&task2);
   kernel_create_task(&task3);

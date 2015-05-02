@@ -4,6 +4,7 @@
 #include "system.h"
 #include "syscall.h"
 #include "utils.h"
+#include "hardware.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -14,13 +15,8 @@ void ContextSwitch(volatile context_t * context);
 
 #define MAX_TASKS    4
 
-// TODO: Configure clocks and calibrate this value.
-// This is based on the TENMS value. The SKEW field is 1
-// so that means that this value is inaccurate or unset.
-// A 60 second sleep() call only lasted ~35 seconds so
-// figure out the clocking ASAP.
-// The schematic shows an external oscillator so use that. 
-#define SYSTICK_RELOAD_MS (600)
+// The system clock is divided by 8 and drives the SysTick timer.
+#define SYSTICK_RELOAD_MS (SYSTEM_CLOCK / 8 / 1000)
 
 // The time slice in milliseconds
 #define TIME_SLICE_MS (10)

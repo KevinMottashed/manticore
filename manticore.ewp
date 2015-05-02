@@ -1891,6 +1891,9 @@
     <name>$PROJ_DIR$\context.s</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\hardware.c</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\kernel.c</name>
   </file>
   <file>

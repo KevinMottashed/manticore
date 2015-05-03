@@ -67,7 +67,7 @@ int main()
 {
   hardware_init();
   kernel_create_task(&task1, 10);
-  kernel_create_task(&task2, 11);
+  kernel_create_task(&task2, 10);
   kernel_create_task(&task3, 15);
   kernel_create_task(&task4, 20);
   kernel_create_task(&task5, 5);

@@ -1,6 +1,8 @@
 #ifndef TASK_H
 #define TASK_H
 
+#include "system.h"
+
 #include <stdint.h>
 
 #define MIN_PRIORITY (0)
@@ -13,19 +15,35 @@ typedef enum task_state_e
   STATE_SLEEP,
 } task_state_t;
 
-// Warning: Member offsets are used in systick.s
+// The is the context that will be saved and restored during context
+// switches. The stack grows towards 0 which is why the registers
+// saved by hardware appear in reverse order.
 typedef struct context_s
 {
-  uint32_t R[13]; // R0 - R12
-  uint32_t SP;
+  // The following registers are saved by software.
+  uint32_t R8;
+  uint32_t R9;
+  uint32_t R10;
+  uint32_t R11;
+  uint32_t R4;
+  uint32_t R5;
+  uint32_t R6;
+  uint32_t R7;
+  
+  // The following registers are saved by hardware when the ISR is entered.
+  uint32_t R0;
+  uint32_t R1;
+  uint32_t R2;
+  uint32_t R3;
+  uint32_t R12;
   uint32_t LR;
   uint32_t PC;
-  uint32_t xPSR;
+  xPSR_Type xPSR;
 } context_t;
 
 typedef struct task_s
 {
-  context_t context;
+  uint32_t stackPointer;
   task_state_t state;
   unsigned int sleep;
   uint8_t priority;

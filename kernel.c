@@ -11,8 +11,6 @@
 #include <string.h>
 #include <assert.h>
 
-void ContextSwitch(volatile context_t * context);
-
 #define MAX_TASKS (8)
 
 // The system clock is divided by 8 and drives the SysTick timer.
@@ -30,9 +28,8 @@ void ContextSwitch(volatile context_t * context);
 int task_count = 0;
 
 volatile task_t tasks[MAX_TASKS];
-volatile context_t * savedContext;
 volatile uint8_t syscallValue;
-context_t kernelContext;
+volatile uint32_t * savedStackPointer;
 
 void kernel_main(void)
 {
@@ -200,8 +197,10 @@ void kernel_main(void)
       // We have a task to schedule.
       activeTask = nextTask;
       tasks[nextTask].state = STATE_RUNNING;
-      savedContext = &tasks[nextTask].context;
-      ContextSwitch(&tasks[nextTask].context);
+      savedStackPointer = &tasks[nextTask].stackPointer;
+      
+      // Trigger a PendSV interrupt to return to task context.
+      SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
     }
     else
     {
@@ -220,10 +219,17 @@ void kernel_main(void)
 
 void kernel_create_task(task t, uint8_t priority)
 {
+  context_t context;
+  memset(&context, 0, sizeof(context)); // Most registers will start off as zero.
+  context.PC = (uint32_t)t; // The program counter starts at the task entry point.
+  context.xPSR.b.T = 1; // Enabled Thumb mode.
+  
   int i = task_count;
   tasks[i].state = STATE_READY;
   tasks[i].priority = priority;
-  tasks[i].context.PC = (uint32_t)t;
-  tasks[i].context.SP = (uint32_t)(tasks[i].stack + sizeof(tasks[i].stack)/8 - 1);
+  tasks[i].stackPointer = (uint32_t)(tasks[i].stack + sizeof(tasks[i].stack)/8 - 1);
+  tasks[i].stackPointer -= sizeof(context_t);
+  memcpy((void*)tasks[i].stackPointer, &context, sizeof(context));
+  
   ++task_count;
 }

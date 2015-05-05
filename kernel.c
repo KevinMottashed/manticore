@@ -31,6 +31,9 @@ volatile task_t tasks[MAX_TASKS];
 volatile uint8_t syscallValue;
 volatile uint32_t * savedStackPointer;
 
+static void kernel_update_sleep(void);
+static void kernel_handle_syscall(uint8_t value, int activeTask);
+
 void kernel_main(void)
 {
   // Enable SysTick IRQ.
@@ -42,61 +45,11 @@ void kernel_main(void)
   
   while (true)
   {
-    // Find out how much time passed since the kernel last ran.
-    uint32_t load = SysTick->LOAD;
-    uint32_t value;
-    if (syscallValue == SYSCALL_NONE)
-    {
-      // We need to check the syscall value.
-      // The systick timer is automatically reloaded so if
-      // we got here it means that the timer reached zero.
-      value = 0;
-    }
-    else
-    {
-      value = SysTick->VAL;
-    }
-    uint32_t delta = load - value;
-
-    // Iterate through all the tasks to update the sleep time left.
-    for (int i = 0; i < task_count; ++i)
-    {
-      if (tasks[i].state == STATE_SLEEP)
-      {
-        if (delta >= tasks[i].sleep)
-        {
-          tasks[i].sleep = 0;
-          tasks[i].state = STATE_READY;
-        }
-        else
-        {
-          tasks[i].sleep -= delta;
-        }
-      }
-    }
+    // Update how much time is left for each sleeping task to wake up.
+    kernel_update_sleep();
     
     // Handle the system call.
-    switch (syscallValue)
-    {
-    case SYSCALL_NONE:
-    case SYSCALL_YIELD:
-      // There's nothing special to do here. One of the following occured:
-      // 1. The time slice expired.
-      // 2. A task yielded the remainder of its time slice.
-      // 3. The systick expired but no tasks were running.
-      // Either way, the active task is no longer running.
-      if (activeTask != -1)
-      {
-        tasks[activeTask].state = STATE_READY;
-      }
-      break;
-    case SYSCALL_SLEEP:
-      tasks[activeTask].state = STATE_SLEEP;
-      tasks[activeTask].sleep = syscallContext.sleep * SYSTICK_RELOAD_MS;
-      break;
-    default:
-      assert(false);
-    }
+    kernel_handle_syscall(syscallValue, activeTask);
     syscallValue = SYSCALL_NONE;
     
     // We will iterate through all the tasks twice.
@@ -250,4 +203,65 @@ void kernel_create_task(task t, uint8_t priority)
   memcpy((void*)tasks[i].stackPointer, &context, sizeof(context));
   
   ++task_count;
+}
+
+void kernel_update_sleep(void)
+{
+  // Find out how much time passed since the kernel last ran.
+  uint32_t load = SysTick->LOAD;
+  uint32_t value;
+  if (syscallValue == SYSCALL_NONE)
+  {
+    // We need to check the syscall value.
+    // The systick timer is automatically reloaded so if
+    // we got here it means that the timer reached zero.
+    value = 0;
+  }
+  else
+  {
+    value = SysTick->VAL;
+  }
+  uint32_t delta = load - value;
+
+  // Iterate through all the tasks to update the sleep time left.
+  for (int i = 0; i < task_count; ++i)
+  {
+    if (tasks[i].state == STATE_SLEEP)
+    {
+      if (delta >= tasks[i].sleep)
+      {
+        tasks[i].sleep = 0;
+        tasks[i].state = STATE_READY;
+      }
+      else
+      {
+        tasks[i].sleep -= delta;
+      }
+    }
+  }  
+}
+
+void kernel_handle_syscall(uint8_t value, int activeTask)
+{
+  switch (value)
+  {
+  case SYSCALL_NONE:
+  case SYSCALL_YIELD:
+    // There's nothing special to do here. One of the following occured:
+    // 1. The time slice expired.
+    // 2. A task yielded the remainder of its time slice.
+    // 3. The systick expired but no tasks were running.
+    // Either way, the active task is no longer running.
+    if (activeTask != -1)
+    {
+      tasks[activeTask].state = STATE_READY;
+    }
+    break;
+  case SYSCALL_SLEEP:
+    tasks[activeTask].state = STATE_SLEEP;
+    tasks[activeTask].sleep = syscallContext.sleep * SYSTICK_RELOAD_MS;
+    break;
+  default:
+    assert(false);
+  }  
 }

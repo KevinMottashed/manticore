@@ -37,7 +37,8 @@ void kernel_main(void)
   SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
   
   // Setting this value will result in task 1 going first.
-  int activeTask = task_count - 1;
+  // Assuming all tasks have equal priorities.
+  int activeTask = -1;
   
   while (true)
   {
@@ -57,7 +58,7 @@ void kernel_main(void)
     }
     uint32_t delta = load - value;
 
-    // Iterate through all the tasks to update the sleep time left.  
+    // Iterate through all the tasks to update the sleep time left.
     for (int i = 0; i < task_count; ++i)
     {
       if (tasks[i].state == STATE_SLEEP)
@@ -82,8 +83,12 @@ void kernel_main(void)
       // There's nothing special to do here. One of the following occured:
       // 1. The time slice expired.
       // 2. A task yielded the remainder of its time slice.
-      // Either way, the current task is no longer running.
-      tasks[activeTask].state = STATE_READY;
+      // 3. The systick expired but no tasks were running.
+      // Either way, the active task is no longer running.
+      if (activeTask != -1)
+      {
+        tasks[activeTask].state = STATE_READY;
+      }
       break;
     case SYSCALL_SLEEP:
       tasks[activeTask].state = STATE_SLEEP;
@@ -174,6 +179,18 @@ void kernel_main(void)
         }
       }
     }
+    else
+    {
+      // We have no ready tasks.
+      // Sleep until the next sleeping task needs wakes up.
+      for (int i = 0; i < task_count; ++i)
+      {
+        if (tasks[i].state == STATE_SLEEP)
+        {
+          sleep = MIN(sleep, tasks[i].sleep);
+        }
+      }
+    }
     
     // We don't want to sleep for less than 1ms.
     // When the systick timer is enabled we don't want it to immediatly fire.
@@ -209,6 +226,7 @@ void kernel_main(void)
       // See the comment in the SysTick handler.
       // Some user ISRs could run here. Hence the loop.
       // This loop is essentially the idle task.
+      activeTask = -1;
       do
       {
         __WFI();

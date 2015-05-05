@@ -43,17 +43,19 @@ void task2(void * arg)
 
 void task3(void * arg)
 {
+  int x = *(unsigned int*)arg;
   while (true)
   {
-    sleep(3);
+    sleep(x);
   }
 }
 
 void task4(void * arg)
 {
+  int x = *(unsigned int*)arg;
   while (true)
   {
-    sleep(5);
+    sleep(x);
   }
 }
 
@@ -65,11 +67,14 @@ void task5(void * arg)
 
 int main()
 {
+  unsigned int task3Arg = 3;
+  unsigned int task4Arg = 5;
+  
   hardware_init();
-  kernel_create_task(&task1, 10);
-  kernel_create_task(&task2, 10);
-  kernel_create_task(&task3, 15);
-  kernel_create_task(&task4, 20);
-  kernel_create_task(&task5, 5);
+  kernel_create_task(&task1, NULL, 10);
+  kernel_create_task(&task2, NULL, 10);
+  kernel_create_task(&task3, &task3Arg, 15);
+  kernel_create_task(&task4, &task4Arg, 20);
+  kernel_create_task(&task5, NULL, 5);
   kernel_main();
 }

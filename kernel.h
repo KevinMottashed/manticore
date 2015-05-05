@@ -7,6 +7,6 @@ typedef void (*task)(void *);
 
 void kernel_main(void);
 
-void kernel_create_task(task t, uint8_t priority);
+void kernel_create_task(task t, void * arg, uint8_t priority);
 
 #endif

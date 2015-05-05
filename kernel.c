@@ -188,10 +188,11 @@ void kernel_main(void)
   }
 }
 
-void kernel_create_task(task t, uint8_t priority)
+void kernel_create_task(task t, void * arg, uint8_t priority)
 {
   context_t context;
   memset(&context, 0, sizeof(context)); // Most registers will start off as zero.
+  context.R0 = (uint32_t)arg;
   context.PC = (uint32_t)t; // The program counter starts at the task entry point.
   context.xPSR.b.T = 1; // Enabled Thumb mode.
   

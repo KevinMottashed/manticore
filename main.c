@@ -18,11 +18,17 @@
 #include <string.h>
 #include <assert.h>
 
-void task1(void * arg);
-void task2(void * arg);
-void task3(void * arg);
-void task4(void * arg);
-void task5(void * arg);
+static void task1(void * arg);
+static void task2(void * arg);
+static void task3(void * arg);
+static void task4(void * arg);
+static void task5(void * arg);
+
+static uint8_t stack1[256];
+static uint8_t stack2[192];
+static uint8_t stack3[128];
+static uint8_t stack4[147];
+static uint8_t stack5[187];
 
 void task1(void * arg)
 {
@@ -52,7 +58,7 @@ void task2(void * arg)
 
 void task3(void * arg)
 {
-  int x = *(unsigned int*)arg;
+  unsigned int x = *(unsigned int*)arg;
   while (true)
   {
     sleep(x);
@@ -61,7 +67,7 @@ void task3(void * arg)
 
 void task4(void * arg)
 {
-  int x = *(unsigned int*)arg;
+  unsigned int x = *(unsigned int*)arg;
   while (true)
   {
     sleep(x);
@@ -80,10 +86,10 @@ int main()
   unsigned int task4Arg = 5;
   
   hardware_init();
-  kernel_create_task(&task1, NULL, 10);
-  kernel_create_task(&task2, NULL, 10);
-  kernel_create_task(&task3, &task3Arg, 15);
-  kernel_create_task(&task4, &task4Arg, 20);
-  kernel_create_task(&task5, NULL, 5);
+  kernel_create_task(&task1, NULL, stack1, sizeof(stack1), 10);
+  kernel_create_task(&task2, NULL, stack2, sizeof(stack2), 10);
+  kernel_create_task(&task3, &task3Arg, stack3, sizeof(stack3), 15);
+  kernel_create_task(&task4, &task4Arg, stack4, sizeof(stack4), 20);
+  kernel_create_task(&task5, NULL, stack5, sizeof(stack5), 5);
   kernel_main();
 }

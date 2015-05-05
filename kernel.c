@@ -198,8 +198,10 @@ void kernel_main(void)
   }
 }
 
-void kernel_create_task(task t, void * arg, uint8_t priority)
+void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
 {
+  assert(stackSize >= sizeof(context_t));
+  
   context_t context;
   memset(&context, 0, sizeof(context)); // Most registers will start off as zero.
   context.R0 = (uint32_t)arg;
@@ -209,7 +211,8 @@ void kernel_create_task(task t, void * arg, uint8_t priority)
   int i = task_count;
   tasks[i].state = STATE_READY;
   tasks[i].priority = priority;
-  tasks[i].stackPointer = (uint32_t)(tasks[i].stack + sizeof(tasks[i].stack)/8 - 1);
+  tasks[i].stackPointer = (uint32_t)stack + stackSize;
+  tasks[i].stackPointer &= ~0x7; // The stack must be 8 byte aligned.
   tasks[i].stackPointer -= sizeof(context_t);
   memcpy((void*)tasks[i].stackPointer, &context, sizeof(context));
   

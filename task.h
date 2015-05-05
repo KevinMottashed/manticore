@@ -57,10 +57,6 @@ typedef struct task_s
   task_state_t state;
   unsigned int sleep;
   uint8_t priority;
-  
-  // 256 bytes of stack for tasks.
-  // uint64_t is used to ensure 8-byte alignment.
-  uint64_t stack[256/sizeof(uint64_t)];
 } task_t;
 
 #endif

@@ -1,0 +1,26 @@
+I have 2 goals with this project.
+1. Learn more about real time operating systems. Operating systems have always intrigued me due to their complexity.
+2. Learn assembly language programming. I've never had a good reason to write assembly until this project.
+
+I'll consider the project a success when the following has been implemented.
+1. Context switching.
+2. Priority based round robin based scheduler with full pre-emption.
+3. Priority inheritance. A high priority task waiting on a low priority task should elevate the effective priority of the low priority task.
+4. The ability to sleep in a low power mode.
+5. A few synchronization primitives:
+5a. Mutex
+5b. Semaphore. (maybe)
+5c. Condition variable. (maybe)
+5d. Synchronous message passing.
+5e. Message queue. (maybe)
+5f. Read/write lock. (maybe)
+5g. Spinlock. (maybe)
+5h. Barrier. (maybe)
+6. The ability to dynamically create and delete tasks.
+   
+Instructions: The code can be compiled using IAR EWARM 7.4. The firmware runs on the STM32F0 discovery board. I chose this
+hardware for the following reasons:
+1. The ARM architecture seems to be the preferred architecture for embedded software and firmware.
+2. The cortex-m0 is a simple processor. I figured it would be easier to start with this processor rather than an
+   application level processor like x86, x86_64 or multi core ARM processors.
+3. I got this board for free.

@@ -18,9 +18,7 @@ I'll consider the project a success when the following has been implemented.
 5h. Barrier. (maybe)
 6. The ability to dynamically create and delete tasks.
    
-Instructions: The code can be compiled using IAR EWARM 7.4. The firmware runs on the STM32F0 discovery board. I chose this
-hardware for the following reasons:
+Instructions: The code can be compiled using IAR EWARM 7.4. The firmware runs on the STM32F0 discovery board. I chose this hardware for the following reasons:
 1. The ARM architecture seems to be the preferred architecture for embedded software and firmware.
-2. The cortex-m0 is a simple processor. I figured it would be easier to start with this processor rather than an
-   application level processor like x86, x86_64 or multi core ARM processors.
+2. The cortex-m0 is a simple processor. I figured it would be easier to start with this processor rather than an application level processor like x86, x86_64 or multi core ARM processors.
 3. I got this board for free.

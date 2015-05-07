@@ -13,7 +13,10 @@
 
 #include <stdint.h>
 
-typedef void (*task)(void *);
+// The __task specifier informs the compiler that the function is an
+// RTOS task. This means that the normal calling don't need to be followed
+// and that it only needs to preserve the LR register.
+typedef void (__task *task)(void *);
 
 void kernel_main(void);
 

@@ -19,12 +19,12 @@
 #include <string.h>
 #include <assert.h>
 
-static void task1(void * arg);
-static void task2(void * arg);
-static void task3(void * arg);
-static void task4(void * arg);
-static void task5(void * arg);
-static void task6(void * arg);
+static __task void task1(void * arg);
+static __task void task2(void * arg);
+static __task void task3(void * arg);
+static __task void task4(void * arg);
+static __task void task5(void * arg);
+static __task void task6(void * arg);
 
 static uint8_t stack1[256];
 static uint8_t stack2[192];
@@ -35,7 +35,7 @@ static uint8_t stack6[128];
 
 static mutex_t m1;
 
-void task1(void * arg)
+__task void task1(void * arg)
 {
   // TODO make this task turn LD3 on
   while (true)
@@ -50,7 +50,7 @@ void task1(void * arg)
   }
 }
 
-void task2(void * arg)
+__task void task2(void * arg)
 {
   // TODO make this task turn LD3 off
   while (true)
@@ -63,7 +63,7 @@ void task2(void * arg)
   }
 }
 
-void task3(void * arg)
+__task void task3(void * arg)
 {
   unsigned int x = *(unsigned int*)arg;
   while (true)
@@ -72,7 +72,7 @@ void task3(void * arg)
   }
 }
 
-void task4(void * arg)
+__task void task4(void * arg)
 {
   unsigned int x = *(unsigned int*)arg;
   while (true)
@@ -81,13 +81,13 @@ void task4(void * arg)
   }
 }
 
-void task5(void * arg)
+__task void task5(void * arg)
 {
   // This task should never be scheduled due to its low priority.
   assert(false);
 }
 
-void task6(void * arg)
+__task void task6(void * arg)
 {
   while (true)
   {

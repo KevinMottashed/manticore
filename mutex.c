@@ -43,6 +43,25 @@ void mutex_lock(mutex_t * mutex)
   }
 }
 
+bool mutex_trylock(mutex_t * mutex)
+{
+  // Disable the system tick
+  SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+  __DSB();
+  
+  if (mutex->locked)
+  {
+    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    return false;
+  }
+  else
+  {
+    mutex->locked = true;
+    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    return true;
+  }
+}
+
 void mutex_unlock(mutex_t * mutex)
 {
   // Disable the system tick

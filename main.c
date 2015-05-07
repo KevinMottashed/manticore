@@ -57,8 +57,15 @@ __task void task2(void * arg)
   {
     for (int i = 0x10000; i < 0x20000; ++i)
     {
-      mutex_lock(&m1);
-      mutex_unlock(&m1);
+      if (mutex_trylock(&m1))
+      {
+        mutex_unlock(&m1);
+      }
+      else
+      {
+        mutex_lock(&m1);
+        mutex_unlock(&m1);
+      }
     }
   }
 }

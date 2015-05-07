@@ -25,6 +25,8 @@ typedef struct mutex_s
 void mutex_init(mutex_t * mutex);
 
 void mutex_lock(mutex_t * mutex);
+bool mutex_trylock(mutex_t * mutex);
+
 void mutex_unlock(mutex_t * mutex);
 
 #endif

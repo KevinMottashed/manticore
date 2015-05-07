@@ -2121,6 +2121,9 @@
     <name>$PROJ_DIR$\main.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\mutex.c</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\syscall.c</name>
   </file>
   <file>

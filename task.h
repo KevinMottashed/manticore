@@ -12,6 +12,7 @@
 #define TASK_H
 
 #include "system.h"
+#include "mutex.h"
 
 #include <stdint.h>
 
@@ -23,6 +24,7 @@ typedef enum task_state_e
   STATE_RUNNING,
   STATE_READY,
   STATE_SLEEP,
+  STATE_MUTEX,
 } task_state_t;
 
 // The is the context that will be saved and restored during context
@@ -55,8 +57,10 @@ typedef struct task_s
 {
   uint32_t stackPointer;
   task_state_t state;
-  unsigned int sleep;
   uint8_t priority;
+  
+  unsigned int sleep;
+  mutex_t * mutex; // The mutex that this task is blocked on.
 } task_t;
 
 #endif

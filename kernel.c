@@ -15,6 +15,7 @@
 #include "syscall.h"
 #include "utils.h"
 #include "hardware.h"
+#include "mutex.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -98,6 +99,8 @@ void kernel_main(void)
         break;
       case STATE_SLEEP:
         // The second iteration will deal with the sleeping tasks.
+        break;
+      case STATE_MUTEX:
         break;
       case STATE_RUNNING: // No tasks are running. The kernel is running.
       default:
@@ -274,6 +277,37 @@ void kernel_handle_syscall(uint8_t value, int activeTask)
   case SYSCALL_SLEEP:
     tasks[activeTask].state = STATE_SLEEP;
     tasks[activeTask].sleep = syscallContext.sleep * SYSTICK_RELOAD_MS;
+    break;
+  case SYSCALL_MUTEX_LOCK:
+    tasks[activeTask].state = STATE_MUTEX;
+    tasks[activeTask].mutex = syscallContext.mutex;
+    break;
+  case SYSCALL_MUTEX_UNLOCK:
+    {
+      // A task is still ready after unlocking a mutex.
+      tasks[activeTask].state = STATE_READY;
+        
+      // Find the next highest priority task that's waiting
+      // for this mutex and unblock it.
+      int nextTask = -1;
+      int highPriority = -1;
+      for (int i = 0, j = (activeTask + 1) % task_count;
+           i < task_count; 
+           ++i, j = (j + 1) % task_count)
+      {
+        if (tasks[j].state == STATE_MUTEX && 
+            tasks[j].mutex == syscallContext.mutex &&
+            tasks[j].priority > highPriority)
+        {
+          nextTask = j;
+        }
+      }
+      if (nextTask != -1)
+      {
+        tasks[nextTask].state = STATE_READY;
+        tasks[nextTask].mutex = NULL;
+      }
+    }
     break;
   default:
     assert(false);

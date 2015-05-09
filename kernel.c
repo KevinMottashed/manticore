@@ -36,13 +36,17 @@
 // The number of SysTick ticks in a time slice
 #define TIME_SLICE_TICKS (TIME_SLICE_MS * SYSTICK_RELOAD_MS)
 
+// This is the aproximate number of systicks spent in the kernel
+// while the systick timer is being reset.
+#define KERNEL_SYSTICK_DISABLE (2)
+
 int task_count = 0;
 
 volatile task_t tasks[MAX_TASKS];
 volatile uint8_t syscallValue;
 volatile uint32_t * savedStackPointer;
 
-static void kernel_update_sleep(void);
+static void kernel_update_sleep(unsigned int ticks);
 static void kernel_handle_syscall(uint8_t value, int activeTask);
 
 void kernel_main(void)
@@ -54,10 +58,16 @@ void kernel_main(void)
   // Assuming all tasks have equal priorities.
   int activeTask = -1;
   
+  unsigned int kernelTicks = 0;
+  unsigned int systickReload = 0xFFFFFF;
+  
   while (true)
   {
+    // The systick value when entering the kernel.
+    int kernelStartTicks = SysTick->VAL;
+    
     // Update how much time is left for each sleeping task to wake up.
-    kernel_update_sleep();
+    kernel_update_sleep(systickReload - kernelStartTicks + kernelTicks);
     
     // Handle the system call.
     kernel_handle_syscall(syscallValue, activeTask);
@@ -169,11 +179,16 @@ void kernel_main(void)
     // 2. sleep()
     // 3. Check the status. The operation should be done by now or its failed.
     sleep = MAX(sleep, SYSTICK_RELOAD_MS);
+    systickReload = sleep;
     
-    // Restart the systick timer.
-    SysTick->LOAD = sleep;
+    // Remember the amount of time spent in the kernel.
+    kernelTicks = kernelStartTicks - SysTick->VAL + KERNEL_SYSTICK_DISABLE;
+    
+    // Restart the systick timer.  
+    SysTick->LOAD = systickReload;
     SysTick->VAL = 0;
-    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk;
+    SysTick->LOAD = 0;
     
     if (readyTasks > 0)
     {
@@ -222,37 +237,21 @@ void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, ui
   ++task_count;
 }
 
-void kernel_update_sleep(void)
+void kernel_update_sleep(unsigned int ticks)
 {
-  // Find out how much time passed since the kernel last ran.
-  uint32_t load = SysTick->LOAD;
-  uint32_t value;
-  if (syscallValue == SYSCALL_NONE)
-  {
-    // We need to check the syscall value.
-    // The systick timer is automatically reloaded so if
-    // we got here it means that the timer reached zero.
-    value = 0;
-  }
-  else
-  {
-    value = SysTick->VAL;
-  }
-  uint32_t delta = load - value;
-
   // Iterate through all the tasks to update the sleep time left.
   for (int i = 0; i < task_count; ++i)
   {
     if (tasks[i].state == STATE_SLEEP)
     {
-      if (delta >= tasks[i].sleep)
+      if (ticks >= tasks[i].sleep)
       {
         tasks[i].sleep = 0;
         tasks[i].state = STATE_READY;
       }
       else
       {
-        tasks[i].sleep -= delta;
+        tasks[i].sleep -= ticks;
       }
     }
   }  

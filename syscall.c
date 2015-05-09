@@ -18,8 +18,8 @@ SyscallContext_t syscallContext;
 
 void yield(void)
 {
-  // Disable the system tick
-  SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+  // Disable the system tick ISR
+  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
   
   // Execute the system call
@@ -34,8 +34,8 @@ void sleep(unsigned int seconds)
 
 void delay(unsigned int ms)
 {
-  // Disable the system tick
-  SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+  // Disable the system tick ISR
+  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
   
   syscallContext.sleep = ms;

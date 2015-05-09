@@ -24,15 +24,23 @@ void mutex_init(mutex_t * mutex)
 
 void mutex_lock(mutex_t * mutex)
 {
-  // Disable the system tick
-  SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+  // Disable the system tick ISR
+  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
 
   if (!mutex->locked)
   {
     // The mutex is unlocked. Just take it.
     mutex->locked = true;
-    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    
+    // Reenable the systick ISR.
+    SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+    if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
+    {
+      // Trigger the systick ISR if the timer expired
+      // while we were locking the mutex.
+      SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+    }
   }
   else
   {
@@ -45,27 +53,35 @@ void mutex_lock(mutex_t * mutex)
 
 bool mutex_trylock(mutex_t * mutex)
 {
-  // Disable the system tick
-  SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+  // Disable the system tick ISR
+  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
   
   if (mutex->locked)
   {
-    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+    if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
+    {
+      SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+    }
     return false;
   }
   else
   {
     mutex->locked = true;
-    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+    if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
+    {
+      SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+    }
     return true;
   }
 }
 
 void mutex_unlock(mutex_t * mutex)
 {
-  // Disable the system tick
-  SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+  // Disable the system tick ISR
+  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
 
   if (mutex->blocked > 0)
@@ -80,6 +96,10 @@ void mutex_unlock(mutex_t * mutex)
   {
     // No one is waiting for this mutex.
     mutex->locked = false;
-    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+    if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
+    {
+      SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+    }
   }
 }

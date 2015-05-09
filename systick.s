@@ -25,16 +25,14 @@ SysTickCtrlAddr
   SECTION .text : CODE (2)
   THUMB
 
-DisableSysTick:
+ClearSysTick:
+  ; This functions read the systick control register
+  ; to clear the COUNTFLAG field.
   ; R0 = SysTick->CTRL address
   ; R1 = SysTick->CTRL value
-  ; R2 = Work area
   LDR R0, =SysTickCtrlAddr
   LDR R0, [R0]
   LDR R1, [R0]
-  MOVS R2, #1
-  BICS R1, R1, R2
-  STR R1, [R0]
   BX LR
 
 SysTick_Handler:
@@ -52,10 +50,9 @@ SysTick_Handler:
 
 run_isr:
   ; The systick handler only needs to save to save the current context
-  ; and then let the kernel take over. Disable the systick ISR and
-  ; let the kernel reenable it. 
+  ; and then let the kernel take over. Clear the COUNTFLAG field.
   BL SaveContext
-  BL DisableSysTick
+  BL ClearSysTick
   B RestoreKernel
   
   END

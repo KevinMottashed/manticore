@@ -55,12 +55,11 @@ typedef struct context_s
 
 typedef struct task_s
 {
+  uint32_t id;
   uint32_t stackPointer;
   task_state_t state;
   uint8_t priority;
-  
   unsigned int sleep;
-  mutex_t * mutex; // The mutex that this task is blocked on.
 } task_t;
 
 #endif

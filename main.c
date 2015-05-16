@@ -101,6 +101,7 @@ __task void task6(void * arg)
     mutex_lock(&m1);
     delay(50);
     mutex_unlock(&m1);
+    delay(50);
   }
 }
 
@@ -110,6 +111,8 @@ int main()
   unsigned int task4Arg = 5;
   
   hardware_init();
+  kernel_init();
+  
   mutex_init(&m1);
   kernel_create_task(&task1, NULL, stack1, sizeof(stack1), 10);
   kernel_create_task(&task2, NULL, stack2, sizeof(stack2), 10);

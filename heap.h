@@ -8,27 +8,19 @@
  * ----------------------------------------------------------------------------
  */
 
+/* 
+ * This heap implementation simply wraps the standerd
+ * memory functions for thread safety.
+ */
 
-#ifndef MUTEX_H
-#define MUTEX_H
+#ifndef HEAP_H
+#define HEAP_H
 
-#include "pqueue.h"
-   
-#include <stdint.h>
-#include <stdbool.h>
+#include <stddef.h>
 
-typedef struct mutex_s
-{
-  uint8_t id; // Unique identifier for this mutex.
-  bool locked;
-  pqueue_t queue; // The queue of blocked tasks waiting for this mutex.
-} mutex_t;
-
-void mutex_init(mutex_t * mutex);
-
-void mutex_lock(mutex_t * mutex);
-bool mutex_trylock(mutex_t * mutex);
-
-void mutex_unlock(mutex_t * mutex);
+void * heap_malloc(size_t size);
+void heap_free(void * ptr);
+void * heap_calloc(size_t num, size_t size);
+void * heap_realloc (void* ptr, size_t size);
 
 #endif

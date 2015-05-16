@@ -16,13 +16,14 @@
 #include "utils.h"
 #include "hardware.h"
 #include "mutex.h"
+#include "heap.h"
+#include "pqueue.h"
+#include "vector.h"
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
-
-#define MAX_TASKS (8)
 
 // The system clock is divided by 8 and drives the SysTick timer.
 #define SYSTICK_RELOAD_MS (SYSTEM_CLOCK / 8 / 1000)
@@ -40,23 +41,27 @@
 // while the systick timer is being reset.
 #define KERNEL_SYSTICK_DISABLE (2)
 
-int task_count = 0;
-
-volatile task_t tasks[MAX_TASKS];
 volatile uint8_t syscallValue;
 volatile uint32_t * savedStackPointer;
 
+static task_t * runningTask;
+static pqueue_t readyQueue;
+static vector_t sleepVector;
+
 static void kernel_update_sleep(unsigned int ticks);
-static void kernel_handle_syscall(uint8_t value, int activeTask);
+static void kernel_handle_syscall(uint8_t value);
+
+void kernel_init(void)
+{
+  // Initialize the ready queue and the vector of sleeping tasks.
+  pqueue_init(&readyQueue);
+  vector_init(&sleepVector);
+}
 
 void kernel_main(void)
 {
   // Enable SysTick IRQ.
   SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
-  
-  // Setting this value will result in task 1 going first.
-  // Assuming all tasks have equal priorities.
-  int activeTask = -1;
   
   unsigned int kernelTicks = 0;
   unsigned int systickReload = 0xFFFFFF;
@@ -70,88 +75,44 @@ void kernel_main(void)
     kernel_update_sleep(systickReload - kernelStartTicks + kernelTicks);
     
     // Handle the system call.
-    kernel_handle_syscall(syscallValue, activeTask);
+    kernel_handle_syscall(syscallValue);
     syscallValue = SYSCALL_NONE;
     
-    // We will iterate through all the tasks twice.
-    // The first pass will determine which task to run next.
-    // The second pass will determine if the task will ever need to yield to
-    // a sleeping task. This is a priority round-robin scheduler. The highest
+    // This is a priority round-robin scheduler. The highest
     // priority ready task will always run next and will never yield to
-    // a lower priority task. When counting ready tasks we only care about
-    // those at the highest priority because the lower priority ones will
-    // never be scheduled unless a system call changes the state of the system.
-    
-    // First pass. Find the following information:
-    // 1. The next task to run.
-    // 2. The highest priority among the ready tasks.
-    // 3. The number of ready tasks with the highest priority.
-    int nextTask = -1;
-    int readyTasks = 0;
-    int highPriority = -1; // The highest priority of all READY tasks
-    for (int i = 0, j = (activeTask + 1) % task_count;
-         i < task_count; 
-         ++i, j = (j + 1) % task_count)
-    {
-      switch (tasks[j].state)
-      {
-      case STATE_READY:
-        if (tasks[j].priority > highPriority)
-        {
-          nextTask = j;
-          highPriority = tasks[j].priority;
-          readyTasks = 1;
-        }
-        else if (tasks[j].priority == highPriority)
-        {
-          ++readyTasks;
-        }
-        break;
-      case STATE_SLEEP:
-        // The second iteration will deal with the sleeping tasks.
-        break;
-      case STATE_MUTEX:
-        break;
-      case STATE_RUNNING: // No tasks are running. The kernel is running.
-      default:
-        assert(false);
-      }
-    }
+    // a lower priority task. The next task to run is the one at 
+    // the front of the priority queue.
+    task_t * nextTask = pqueue_pop(&readyQueue);
     
     // We now know the next task that will run. We need to find out if
     // there's a sleeping task that needs to wakeup before the time slice expires.
-    // Second pass. Find the following information:
-    // 1. The length of time to sleep for.
-    // 2. The number of sleeping tasks of equal or higher priority.
     unsigned int sleep = MAX_SYSTICK_RELOAD;
-    int sleepingTasks = 0;
-    if (readyTasks > 0)
+    if (nextTask != NULL)
     {
-      if (readyTasks > 1)
+      // Have a peek at the next ready task. We need to use a time slice
+      // if the next task has the same priority as the task we're about
+      // to run. This ensures the CPU is shared between all the 
+      // highest priority tasks.
+      task_t * temp = pqueue_top(&readyQueue);
+      if (temp != NULL && temp->priority == nextTask->priority)
       {
-        // There's more than 1 task that needs to run.
-        // We'll need to context switch after a time slice.
         sleep = TIME_SLICE_TICKS;
       }
-      for (int i = 0; i < task_count; ++i)
+      for (int i = 0; i < vector_size(&sleepVector); ++i)
       {
-        if (tasks[i].state == STATE_SLEEP)
+        task_t * t = vector_at(&sleepVector, i);
+        if (t->priority > nextTask->priority)
         {
-          if (tasks[i].priority > highPriority)
-          {
-            // A higher priority sleeping task can reduce the sleep time
-            // to less than the time slice.
-            sleep = MIN(sleep, tasks[i].sleep);
-            ++sleepingTasks;
-          }
-          else if (tasks[i].priority == highPriority)
-          {
-            // An equal priority sleeping task can reduce the sleep time
-            // but still needs to respect the time slice.
-            unsigned int temp = MIN(sleep, tasks[i].sleep);
-            sleep = MAX(temp, TIME_SLICE_TICKS);
-            ++sleepingTasks;
-          }
+          // A higher priority sleeping task can reduce the sleep time
+          // to less than the time slice.
+          sleep = MIN(sleep, t->sleep);
+        }
+        else if (t->priority == nextTask->priority)
+        {
+          // An equal priority sleeping task can reduce the sleep time
+          // but still needs to respect the time slice.
+          unsigned int temp = MIN(sleep, t->sleep);
+          sleep = MAX(temp, TIME_SLICE_TICKS);
         }
       }
     }
@@ -159,12 +120,10 @@ void kernel_main(void)
     {
       // We have no ready tasks.
       // Sleep until the next sleeping task needs wakes up.
-      for (int i = 0; i < task_count; ++i)
+      for (int i = 0; i < vector_size(&sleepVector); ++i)
       {
-        if (tasks[i].state == STATE_SLEEP)
-        {
-          sleep = MIN(sleep, tasks[i].sleep);
-        }
+        task_t * t = vector_at(&sleepVector, i);
+        sleep = MIN(sleep, t->sleep);
       }
     }
     
@@ -190,12 +149,12 @@ void kernel_main(void)
     SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk;
     SysTick->LOAD = 0;
     
-    if (readyTasks > 0)
+    if (nextTask != NULL)
     {
       // We have a task to schedule.
-      activeTask = nextTask;
-      tasks[nextTask].state = STATE_RUNNING;
-      savedStackPointer = &tasks[nextTask].stackPointer;
+      runningTask = nextTask;
+      runningTask->state = STATE_RUNNING;
+      savedStackPointer = &runningTask->stackPointer;
       
       // Trigger a PendSV interrupt to return to task context.
       SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
@@ -207,7 +166,7 @@ void kernel_main(void)
       // See the comment in the SysTick handler.
       // Some user ISRs could run here. Hence the loop.
       // This loop is essentially the idle task.
-      activeTask = -1;
+      runningTask = NULL;
       do
       {
         __WFI();
@@ -226,38 +185,44 @@ void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, ui
   context.PC = (uint32_t)t; // The program counter starts at the task entry point.
   context.xPSR.b.T = 1; // Enabled Thumb mode.
   
-  int i = task_count;
-  tasks[i].state = STATE_READY;
-  tasks[i].priority = priority;
-  tasks[i].stackPointer = (uint32_t)stack + stackSize;
-  tasks[i].stackPointer &= ~0x7; // The stack must be 8 byte aligned.
-  tasks[i].stackPointer -= sizeof(context_t);
-  memcpy((void*)tasks[i].stackPointer, &context, sizeof(context));
+  task_t * task = heap_malloc(sizeof(*task));
   
-  ++task_count;
+  static uint8_t taskIdCounter = 0;
+  task->id = taskIdCounter++;
+  task->state = STATE_READY;
+  task->priority = priority;
+  task->stackPointer = (uint32_t)stack + stackSize;
+  task->stackPointer &= ~0x7; // The stack must be 8 byte aligned.
+  task->stackPointer -= sizeof(context_t);
+  memcpy((void*)task->stackPointer, &context, sizeof(context));
+  
+  // Add the task to the queue of ready tasks.
+  pqueue_push(&readyQueue, task, task->priority);
 }
 
 void kernel_update_sleep(unsigned int ticks)
 {
   // Iterate through all the tasks to update the sleep time left.
-  for (int i = 0; i < task_count; ++i)
+  for (int i = 0; i < vector_size(&sleepVector);)
   {
-    if (tasks[i].state == STATE_SLEEP)
+    task_t * t = vector_at(&sleepVector, i);
+    if (ticks >= t->sleep)
     {
-      if (ticks >= tasks[i].sleep)
-      {
-        tasks[i].sleep = 0;
-        tasks[i].state = STATE_READY;
-      }
-      else
-      {
-        tasks[i].sleep -= ticks;
-      }
+      // The task is ready. Move it from the sleep vector
+      t->sleep = 0;
+      t->state = STATE_READY;
+      pqueue_push(&readyQueue, t, t->priority);
+      vector_erase(&sleepVector, i);
+    }
+    else
+    {
+      t->sleep -= ticks;
+      ++i;
     }
   }  
 }
 
-void kernel_handle_syscall(uint8_t value, int activeTask)
+void kernel_handle_syscall(uint8_t value)
 {
   switch (value)
   {
@@ -268,44 +233,37 @@ void kernel_handle_syscall(uint8_t value, int activeTask)
     // 2. A task yielded the remainder of its time slice.
     // 3. The systick expired but no tasks were running.
     // Either way, the active task is no longer running.
-    if (activeTask != -1)
+    if (runningTask != NULL)
     {
-      tasks[activeTask].state = STATE_READY;
+      runningTask->state = STATE_READY;
+      pqueue_push(&readyQueue, runningTask, runningTask->priority);
     }
     break;
   case SYSCALL_SLEEP:
-    tasks[activeTask].state = STATE_SLEEP;
-    tasks[activeTask].sleep = syscallContext.sleep * SYSTICK_RELOAD_MS;
+    runningTask->state = STATE_SLEEP;
+    runningTask->sleep = syscallContext.sleep * SYSTICK_RELOAD_MS;
+    vector_push_back(&sleepVector, runningTask);
     break;
   case SYSCALL_MUTEX_LOCK:
-    tasks[activeTask].state = STATE_MUTEX;
-    tasks[activeTask].mutex = syscallContext.mutex;
-    break;
+    {
+      // Add the active task to the queue of tasks waiting for the mutex.
+      mutex_t * mutex = syscallContext.mutex;      
+      runningTask->state = STATE_MUTEX;
+      pqueue_push(&mutex->queue, runningTask, runningTask->priority);
+      break;
+    }
   case SYSCALL_MUTEX_UNLOCK:
     {
+      mutex_t * mutex = syscallContext.mutex;
+      
+      // Unblock the next highest priority task waiting for this mutex.
+      task_t * next = pqueue_pop(&mutex->queue);
+      next->state = STATE_READY;
+      pqueue_push(&readyQueue, next, next->priority);
+      
       // A task is still ready after unlocking a mutex.
-      tasks[activeTask].state = STATE_READY;
-        
-      // Find the next highest priority task that's waiting
-      // for this mutex and unblock it.
-      int nextTask = -1;
-      int highPriority = -1;
-      for (int i = 0, j = (activeTask + 1) % task_count;
-           i < task_count; 
-           ++i, j = (j + 1) % task_count)
-      {
-        if (tasks[j].state == STATE_MUTEX && 
-            tasks[j].mutex == syscallContext.mutex &&
-            tasks[j].priority > highPriority)
-        {
-          nextTask = j;
-        }
-      }
-      if (nextTask != -1)
-      {
-        tasks[nextTask].state = STATE_READY;
-        tasks[nextTask].mutex = NULL;
-      }
+      runningTask->state = STATE_READY;
+      pqueue_push(&readyQueue, runningTask, runningTask->priority);      
     }
     break;
   default:

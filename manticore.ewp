@@ -39,20 +39,20 @@
         <option>
           <name>Input variant</name>
           <version>3</version>
-          <state>1</state>
+          <state>0</state>
         </option>
         <option>
           <name>Input description</name>
-          <state>Full formatting.</state>
+          <state>Automatic choice of formatter.</state>
         </option>
         <option>
           <name>Output variant</name>
           <version>2</version>
-          <state>1</state>
+          <state>0</state>
         </option>
         <option>
           <name>Output description</name>
-          <state>Full formatting.</state>
+          <state>Automatic choice of formatter.</state>
         </option>
         <option>
           <name>GOutputBinary</name>
@@ -147,7 +147,7 @@
         </option>
         <option>
           <name>OGUseCmsis</name>
-          <state>1</state>
+          <state>0</state>
         </option>
         <option>
           <name>OGUseCmsisDspLib</name>
@@ -1894,6 +1894,9 @@
     <name>$PROJ_DIR$\hardware.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\heap.c</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\kernel.c</name>
   </file>
   <file>
@@ -1901,6 +1904,9 @@
   </file>
   <file>
     <name>$PROJ_DIR$\mutex.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\pqueue.c</name>
   </file>
   <file>
     <name>$PROJ_DIR$\syscall.c</name>
@@ -1912,7 +1918,10 @@
     <name>$PROJ_DIR$\systick.s</name>
   </file>
   <file>
-    <name>$PROJ_DIR$\vector.s</name>
+    <name>$PROJ_DIR$\vector.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\vector_table.s</name>
   </file>
 </project>
 

@@ -19,7 +19,7 @@ void mutex_init(mutex_t * mutex)
   static uint8_t mutexIdCounter = 0;
   mutex->id = mutexIdCounter++;
   mutex->locked = false;
-  mutex->blocked = 0;
+  pqueue_init(&mutex->queue);
 }
 
 void mutex_lock(mutex_t * mutex)
@@ -45,7 +45,6 @@ void mutex_lock(mutex_t * mutex)
   else
   {
     // The mutex is locked. Let the OS schedule the next task.
-    mutex->blocked++;
     syscallContext.mutex = mutex;
     asm ("SVC #3");
   }
@@ -84,11 +83,10 @@ void mutex_unlock(mutex_t * mutex)
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
 
-  if (mutex->blocked > 0)
+  if (!pqueue_empty(&mutex->queue))
   {
     // Another task is waiting for this mutex.
     // Let the kernel run to unblock it.
-    mutex->blocked--;
     syscallContext.mutex = mutex;
     asm ("SVC #4");
   }

@@ -18,6 +18,7 @@
 // and that it only needs to preserve the LR register.
 typedef void (__task *task)(void *);
 
+void kernel_init(void);
 void kernel_main(void);
 
 void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, uint8_t priority);

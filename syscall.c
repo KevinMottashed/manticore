@@ -21,6 +21,7 @@ void yield(void)
   // Disable the system tick ISR
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
+  __ISB();
   
   // Execute the system call
   asm("SVC #1");
@@ -37,6 +38,7 @@ void delay(unsigned int ms)
   // Disable the system tick ISR
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
+  __ISB();
   
   syscallContext.sleep = ms;
   

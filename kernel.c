@@ -147,7 +147,11 @@ void kernel_main(void)
     SysTick->LOAD = systickReload;
     SysTick->VAL = 0;
     SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk;
+    __DSB();
+    __ISB();
     SysTick->LOAD = 0;
+    __DSB();
+    __ISB();
     
     if (nextTask != NULL)
     {
@@ -158,6 +162,8 @@ void kernel_main(void)
       
       // Trigger a PendSV interrupt to return to task context.
       SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
+      __DSB();
+      __ISB();
     }
     else
     {

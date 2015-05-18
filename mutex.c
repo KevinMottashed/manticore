@@ -8,11 +8,17 @@
  * ----------------------------------------------------------------------------
  */
 
+/*
+ * See section B2.5 of the ARM architecture reference manual.
+ * Updates to the SCS registers require the use of DSB/ISB instructions.
+ * The SysTick and SCB are part of the SCS (System control space).
+ */
 
 #include "mutex.h"
 
 #include "system.h"
 #include "syscall.h"
+#include "utils.h"
 
 void mutex_init(mutex_t * mutex)
 {
@@ -27,6 +33,7 @@ void mutex_lock(mutex_t * mutex)
   // Disable the system tick ISR
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
+  __ISB();
 
   if (!mutex->locked)
   {
@@ -35,11 +42,15 @@ void mutex_lock(mutex_t * mutex)
     
     // Reenable the systick ISR.
     SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+    __DSB();
+    __ISB();
     if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
     {
       // Trigger the systick ISR if the timer expired
       // while we were locking the mutex.
       SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+      __DSB();
+      __ISB();
     }
   }
   else
@@ -55,13 +66,18 @@ bool mutex_trylock(mutex_t * mutex)
   // Disable the system tick ISR
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
+  __ISB();
   
   if (mutex->locked)
   {
     SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+    __DSB();
+    __ISB();
     if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
     {
       SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+      __DSB();
+      __ISB();
     }
     return false;
   }
@@ -69,9 +85,13 @@ bool mutex_trylock(mutex_t * mutex)
   {
     mutex->locked = true;
     SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+    __DSB();
+    __ISB();
     if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
     {
       SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+      __DSB();
+      __ISB();
     }
     return true;
   }
@@ -82,6 +102,7 @@ void mutex_unlock(mutex_t * mutex)
   // Disable the system tick ISR
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
   __DSB();
+  __ISB();
 
   if (!pqueue_empty(&mutex->queue))
   {
@@ -95,9 +116,13 @@ void mutex_unlock(mutex_t * mutex)
     // No one is waiting for this mutex.
     mutex->locked = false;
     SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+    __DSB();
+    __ISB();
     if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
     {
       SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+      __DSB();
+      __ISB();
     }
   }
 }

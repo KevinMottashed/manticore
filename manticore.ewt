@@ -2109,10 +2109,13 @@
     </settings>
   </configuration>
   <file>
+    <name>$PROJ_DIR$\clock.c</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\context.s</name>
   </file>
   <file>
-    <name>$PROJ_DIR$\hardware.c</name>
+    <name>$PROJ_DIR$\gpio.c</name>
   </file>
   <file>
     <name>$PROJ_DIR$\heap.c</name>

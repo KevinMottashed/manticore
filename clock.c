@@ -8,11 +8,11 @@
  * ----------------------------------------------------------------------------
  */
 
-#include "hardware.h"
+#include "clock.h"
 
 #include "system.h"
 
-void hardware_init(void)
+void clock_init(void)
 {
   // For now we only need to initialize the clock
   // Turn on the external clock

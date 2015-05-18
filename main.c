@@ -12,8 +12,9 @@
 #include "task.h"
 #include "kernel.h"
 #include "syscall.h"
-#include "hardware.h"
+#include "clock.h"
 #include "mutex.h"
+#include "gpio.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -37,7 +38,6 @@ static mutex_t m1;
 
 __task void task1(void * arg)
 {
-  // TODO make this task turn LD3 on
   while (true)
   {
     for (int i = 0; i < 0x10000; ++i)
@@ -52,7 +52,6 @@ __task void task1(void * arg)
 
 __task void task2(void * arg)
 {
-  // TODO make this task turn LD3 off
   while (true)
   {
     for (int i = 0x10000; i < 0x20000; ++i)
@@ -75,6 +74,9 @@ __task void task3(void * arg)
   unsigned int x = *(unsigned int*)arg;
   while (true)
   {
+    gpio_led3_on();
+    sleep(x);
+    gpio_led3_off();
     sleep(x);
   }
 }
@@ -84,6 +86,9 @@ __task void task4(void * arg)
   unsigned int x = *(unsigned int*)arg;
   while (true)
   {
+    gpio_led4_on();
+    sleep(x);
+    gpio_led4_off();
     sleep(x);
   }
 }
@@ -110,7 +115,8 @@ int main()
   unsigned int task3Arg = 3;
   unsigned int task4Arg = 5;
   
-  hardware_init();
+  clock_init();
+  gpio_init();
   kernel_init();
   
   mutex_init(&m1);

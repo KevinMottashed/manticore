@@ -14,7 +14,7 @@
 #include "system.h"
 #include "syscall.h"
 #include "utils.h"
-#include "hardware.h"
+#include "clock.h"
 #include "mutex.h"
 #include "heap.h"
 #include "pqueue.h"

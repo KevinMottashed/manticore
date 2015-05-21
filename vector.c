@@ -21,7 +21,7 @@ void vector_init(vector_t * v)
 {
   v->size = 0;
   v->alloc = MIN_VECTOR_ALLOC;
-  v->array = heap_malloc(MIN_VECTOR_ALLOC * sizeof(v->array));
+  v->array = heap_malloc(MIN_VECTOR_ALLOC * sizeof(v->array[0]));
   assert(v->array != NULL);
 }
 

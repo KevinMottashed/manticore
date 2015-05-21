@@ -21,7 +21,7 @@
 void pqueue_init(pqueue_t * q)
 {
   q->numElements = 0;
-  q->elements = heap_malloc(MIN_PQUEUE_ALLOC * sizeof(q->elements));
+  q->elements = heap_malloc(MIN_PQUEUE_ALLOC * sizeof(q->elements[0]));
   assert(q->elements != NULL);
   q->sizeElements = MIN_PQUEUE_ALLOC;
 }
@@ -43,7 +43,7 @@ void pqueue_push(pqueue_t * q, void * data, int priority)
   {
     // Grow the array by a factor of 2 when we run out of space.
     q->sizeElements *= 2;
-    q->elements = heap_realloc(q->elements, q->sizeElements * sizeof(q->elements));
+    q->elements = heap_realloc(q->elements, q->sizeElements * sizeof(q->elements[0]));
     assert(q->elements != NULL);
   }
   
@@ -106,4 +106,3 @@ void * pqueue_top(pqueue_t * q)
   }
   return q->elements[0].data;
 }
-

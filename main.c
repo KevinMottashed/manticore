@@ -20,24 +20,27 @@
 #include <string.h>
 #include <assert.h>
 
-static __task void task1(void * arg);
-static __task void task2(void * arg);
-static __task void task3(void * arg);
-static __task void task4(void * arg);
-static __task void task5(void * arg);
-static __task void task6(void * arg);
-static __task void task_led(void * arg);
+// 128 bytes of stack should be enough for these dummy tasks.
+#define NUM_TASKS (7)
+#define STACK_SIZE (128)
 
-static uint8_t stack1[256];
-static uint8_t stack2[192];
-static uint8_t stack3[128];
-static uint8_t stack4[147];
-static uint8_t stack5[187];
-static uint8_t stack6[128];
-static uint8_t stack_led[128];
+// This collection of tasks are used to test the system.
+// I hope to eventually have a proper test framework but this will
+// have to do for now.
+static __task void task_busy_yield(void * arg);
+static __task void task_mutex_try_lock(void * arg);
+static __task void task_led3(void * arg);
+static __task void task_led4(void * arg);
+static __task void task_never(void * arg);
+static __task void task_mutex_lock(void * arg);
+static __task void task_led_server(void * arg);
 
-static mutex_t m1;
-static channel_t c1;
+// ARM requires 8 byte alignment for the stack.
+#pragma data_alignment = 8
+static uint8_t stacks[NUM_TASKS][STACK_SIZE];
+
+static mutex_t mutex;
+static channel_t ledChannel;
 
 // The message format used to communicate with the LED task.
 typedef struct led_cmd_s
@@ -51,10 +54,11 @@ typedef struct led_cmd_reply_s
   bool ok;
 } led_cmd_reply_t;
 
-__task void task1(void * arg)
+__task void task_busy_yield(void * arg)
 {
   while (true)
   {
+    // This task spins for a while and yields.
     for (int i = 0; i < 0x10000; ++i)
     {
       if ((i & 0xFF) == 0)
@@ -65,28 +69,30 @@ __task void task1(void * arg)
   }
 }
 
-__task void task2(void * arg)
+__task void task_mutex_try_lock(void * arg)
 {
+  // This task locks and unlocks the mutex.
   while (true)
   {
     for (int i = 0x10000; i < 0x20000; ++i)
     {
-      if (mutex_trylock(&m1))
+      if (mutex_trylock(&mutex))
       {
-        mutex_unlock(&m1);
+        mutex_unlock(&mutex);
       }
       else
       {
-        mutex_lock(&m1);
-        mutex_unlock(&m1);
+        mutex_lock(&mutex);
+        mutex_unlock(&mutex);
       }
     }
   }
 }
 
-__task void task3(void * arg)
+__task void task_led3(void * arg)
 {
-  unsigned int x = *(unsigned int*)arg;
+  // This task sends messages to the LED server task to toggle LED3.
+  unsigned int x = (unsigned int)arg;
   led_cmd_t cmd;
   cmd.led = 3;
   led_cmd_reply_t reply; 
@@ -95,7 +101,7 @@ __task void task3(void * arg)
   {
     size_t replyLen = sizeof(reply);
     cmd.state = on;
-    channel_send(&c1, &cmd, sizeof(cmd), &reply, &replyLen);
+    channel_send(&ledChannel, &cmd, sizeof(cmd), &reply, &replyLen);
     assert(replyLen == sizeof(reply));
     assert(reply.ok);
     sleep(x);
@@ -103,9 +109,10 @@ __task void task3(void * arg)
   }
 }
 
-__task void task4(void * arg)
+__task void task_led4(void * arg)
 {
-  unsigned int x = *(unsigned int*)arg;
+  // This task sends messages to the LED server task to toggle LED4.
+  unsigned int x = (unsigned int)arg;
   led_cmd_t cmd;
   cmd.led = 4;
   led_cmd_reply_t reply; 
@@ -114,7 +121,7 @@ __task void task4(void * arg)
   {
     size_t replyLen = sizeof(reply);
     cmd.state = on;
-    channel_send(&c1, &cmd, sizeof(cmd), &reply, &replyLen);
+    channel_send(&ledChannel, &cmd, sizeof(cmd), &reply, &replyLen);
     assert(replyLen == sizeof(reply));
     assert(reply.ok);
     sleep(x);
@@ -122,31 +129,32 @@ __task void task4(void * arg)
   }
 }
 
-__task void task5(void * arg)
+__task void task_never(void * arg)
 {
   // This task should never be scheduled due to its low priority.
   assert(false);
 }
 
-__task void task6(void * arg)
+__task void task_mutex_lock(void * arg)
 {
+  // This task locks and unlocks a mutex.
   while (true)
   {
-    mutex_lock(&m1);
+    mutex_lock(&mutex);
     delay(50);
-    mutex_unlock(&m1);
+    mutex_unlock(&mutex);
     delay(50);
   }
 }
 
-__task void task_led(void * arg)
+__task void task_led_server(void * arg)
 {
   // This task receives messages on a channel to turn LEDs on and off.
   while (true)
   {
     led_cmd_t cmd;
     led_cmd_reply_t reply;
-    channel_recv(&c1, &cmd, sizeof(cmd));
+    channel_recv(&ledChannel, &cmd, sizeof(cmd));
     if (cmd.led == 3 && cmd.state == true)
     {
       gpio_led3_on();
@@ -171,28 +179,36 @@ __task void task_led(void * arg)
     {
       reply.ok = false;
     }
-    channel_reply(&c1, &reply, sizeof(reply));
+    channel_reply(&ledChannel, &reply, sizeof(reply));
   }
 }
 
 int main()
 {
-  unsigned int task3Arg = 3;
-  unsigned int task4Arg = 5;
-  
+  // Initialize the hardware.
   clock_init();
   gpio_init();
+
+  // Initialize the kernel
   kernel_init();
   
-  mutex_init(&m1);
-  channel_init(&c1);
+  // Initialize some synchronization mechanisms.
+  mutex_init(&mutex);
+  channel_init(&ledChannel);
   
-  kernel_create_task(&task1, NULL, stack1, sizeof(stack1), 10);
-  kernel_create_task(&task2, NULL, stack2, sizeof(stack2), 10);
-  kernel_create_task(&task3, &task3Arg, stack3, sizeof(stack3), 15);
-  kernel_create_task(&task4, &task4Arg, stack4, sizeof(stack4), 20);
-  kernel_create_task(&task5, NULL, stack5, sizeof(stack5), 5);
-  kernel_create_task(&task6, NULL, stack6, sizeof(stack6), 10);
-  kernel_create_task(&task_led, NULL, stack_led, sizeof(stack_led), 10);
+  //
+  // Create all the tasks.
+  //
+  
+  //                 Entry                 Argument   Stack      Stack Size  Priority
+  kernel_create_task(&task_busy_yield,     NULL,      stacks[0], STACK_SIZE, 10);
+  kernel_create_task(&task_mutex_try_lock, NULL,      stacks[1], STACK_SIZE, 10);
+  kernel_create_task(&task_led3,           (void*)3,  stacks[2], STACK_SIZE, 15);
+  kernel_create_task(&task_led4,           (void*)5,  stacks[3], STACK_SIZE, 20);
+  kernel_create_task(&task_never,          NULL,      stacks[4], STACK_SIZE, 5);
+  kernel_create_task(&task_mutex_lock,     NULL,      stacks[5], STACK_SIZE, 10);
+  kernel_create_task(&task_led_server,     NULL,      stacks[6], STACK_SIZE, 10);
+  
+  // Start the kernel.
   kernel_main();
 }

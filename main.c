@@ -27,7 +27,7 @@
 // This collection of tasks are used to test the system.
 // I hope to eventually have a proper test framework but this will
 // have to do for now.
-static __task void task_busy_yield(void * arg);
+extern __task void Task_Busy_Yield(void * arg);
 static __task void task_mutex_try_lock(void * arg);
 static __task void task_led3(void * arg);
 static __task void task_led4(void * arg);
@@ -53,21 +53,6 @@ typedef struct led_cmd_reply_s
 {
   bool ok;
 } led_cmd_reply_t;
-
-__task void task_busy_yield(void * arg)
-{
-  while (true)
-  {
-    // This task spins for a while and yields.
-    for (int i = 0; i < 0x10000; ++i)
-    {
-      if ((i & 0xFF) == 0)
-      {
-        yield();
-      }
-    }
-  }
-}
 
 __task void task_mutex_try_lock(void * arg)
 {
@@ -201,7 +186,7 @@ int main()
   //
   
   //                 Entry                 Argument   Stack      Stack Size  Priority
-  kernel_create_task(&task_busy_yield,     NULL,      stacks[0], STACK_SIZE, 10);
+  kernel_create_task(&Task_Busy_Yield,     NULL,      stacks[0], STACK_SIZE, 10);
   kernel_create_task(&task_mutex_try_lock, NULL,      stacks[1], STACK_SIZE, 10);
   kernel_create_task(&task_led3,           (void*)3,  stacks[2], STACK_SIZE, 15);
   kernel_create_task(&task_led4,           (void*)5,  stacks[3], STACK_SIZE, 20);

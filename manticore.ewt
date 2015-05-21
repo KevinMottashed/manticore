@@ -2109,6 +2109,9 @@
     </settings>
   </configuration>
   <file>
+    <name>$PROJ_DIR$\channel.c</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\clock.c</name>
   </file>
   <file>

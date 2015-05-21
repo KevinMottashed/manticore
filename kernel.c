@@ -189,9 +189,10 @@ void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, ui
   memset(&context, 0, sizeof(context)); // Most registers will start off as zero.
   context.R0 = (uint32_t)arg;
   context.PC = (uint32_t)t; // The program counter starts at the task entry point.
-  context.xPSR.b.T = 1; // Enabled Thumb mode.
+  context.xPSR.b.T = 1; // Enable Thumb mode.
   
   task_t * task = heap_malloc(sizeof(*task));
+  assert(task != NULL);
   
   static uint8_t taskIdCounter = 0;
   task->id = taskIdCounter++;
@@ -214,7 +215,7 @@ void kernel_update_sleep(unsigned int ticks)
     task_t * t = vector_at(&sleepVector, i);
     if (ticks >= t->sleep)
     {
-      // The task is ready. Move it from the sleep vector
+      // The task is ready. Remove it from the sleep vector.
       t->sleep = 0;
       t->state = STATE_READY;
       pqueue_push(&readyQueue, t, t->priority);
@@ -269,10 +270,97 @@ void kernel_handle_syscall(uint8_t value)
       
       // A task is still ready after unlocking a mutex.
       runningTask->state = STATE_READY;
-      pqueue_push(&readyQueue, runningTask, runningTask->priority);      
+      pqueue_push(&readyQueue, runningTask, runningTask->priority);
+      break;
     }
-    break;
+  case SYSCALL_CHANNEL_SEND:
+    {
+      // Save the message and channel
+      runningTask->channel.c = syscallContext.channel.c;
+      runningTask->channel.msg = syscallContext.channel.msg;
+      runningTask->channel.len = syscallContext.channel.len;
+      runningTask->channel.reply = syscallContext.channel.reply;
+      runningTask->channel.replyLen = syscallContext.channel.replyLen;      
+      
+      task_t * recv = runningTask->channel.c->receive;
+      if (recv != NULL)
+      {
+        // There's a task waiting for a message.
+        recv->state = STATE_READY;
+        pqueue_push(&readyQueue, recv, recv->priority);
+        runningTask->channel.c->receive = NULL;
+        
+        // The sending task becomes reply blocked.
+        runningTask->state = STATE_CHANNEL_RPLY;
+        recv->channel.c->reply = runningTask;
+        
+        // Copy the message from the sender to the receiver.
+        assert(recv->channel.len >= runningTask->channel.len);
+        memcpy(recv->channel.msg, runningTask->channel.msg, runningTask->channel.len);
+      }
+      else
+      {
+        // No task is waiting for a message.
+        runningTask->state = STATE_CHANNEL_SEND;
+        pqueue_push(&runningTask->channel.c->sendQueue, runningTask, runningTask->priority);
+      }
+      break;
+    }
+  case SYSCALL_CHANNEL_RECV:
+    {
+      // Save the message and channel
+      runningTask->channel.c = syscallContext.channel.c;
+      runningTask->channel.msg = syscallContext.channel.msg;
+      runningTask->channel.len = syscallContext.channel.len;
+      
+      task_t * send = pqueue_pop(&runningTask->channel.c->sendQueue);
+      if (send != NULL)
+      {
+        // A task has already sent a message to this channel.
+        runningTask->state = STATE_READY;
+        pqueue_push(&readyQueue, runningTask, runningTask->priority);
+        
+        // The task that sent the message becomes reply blocked.
+        runningTask->channel.c->reply = send;
+        send->state = STATE_CHANNEL_RPLY;
+        
+        // Copy the message from the sender to the receiver.
+        assert(runningTask->channel.len >= send->channel.len);
+        memcpy(runningTask->channel.msg, send->channel.msg, send->channel.len);
+      }
+      else
+      {
+        // No one has sent us a message :-(
+        // We become receive blocked.
+        runningTask->state = STATE_CHANNEL_RECV;
+        runningTask->channel.c->receive = runningTask;
+      }
+      break;
+    }
+  case SYSCALL_CHANNEL_RPLY:
+    {
+      channel_t * channel = syscallContext.channel.c;
+      void * msg = syscallContext.channel.msg;
+      size_t len = syscallContext.channel.len;
+      
+      // Copy the reply to the task that sent us a message.
+      task_t * replyTask = channel->reply;
+      assert(replyTask != NULL);
+      assert(replyTask->channel.len >= len);
+      memcpy(replyTask->channel.reply, msg, len);
+      *replyTask->channel.replyLen = len;
+      channel->reply = NULL;
+      
+      // The task we replied to becomes unblocked.
+      replyTask->state = STATE_READY;
+      pqueue_push(&readyQueue, replyTask, replyTask->priority);
+      
+      // The task that replied is still ready.
+      runningTask->state = STATE_READY;      
+      pqueue_push(&readyQueue, runningTask, runningTask->priority);
+      break;
+    }
   default:
     assert(false);
-  }  
+  }
 }

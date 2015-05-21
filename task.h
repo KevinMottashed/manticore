@@ -13,6 +13,7 @@
 
 #include "system.h"
 #include "mutex.h"
+#include "channel.h"
 
 #include <stdint.h>
 
@@ -25,6 +26,9 @@ typedef enum task_state_e
   STATE_READY,
   STATE_SLEEP,
   STATE_MUTEX,
+  STATE_CHANNEL_SEND,
+  STATE_CHANNEL_RECV,
+  STATE_CHANNEL_RPLY,
 } task_state_t;
 
 // The is the context that will be saved and restored during context
@@ -53,13 +57,35 @@ typedef struct context_s
   xPSR_Type xPSR;
 } context_t;
 
+// The context that needs to be saved when send, receive or reply blocked.
+typedef struct channel_context_s
+{
+  // The channel that we're block on
+  struct channel_s * c;
+  
+  // Used for storing the send/recv buffer.
+  void * msg;
+  size_t len;
+  
+  // Used for storing the reply buffer.
+  void * reply;
+  size_t * replyLen;
+} channel_context_t;
+
 typedef struct task_s
 {
   uint32_t id;
   uint32_t stackPointer;
   task_state_t state;
   uint8_t priority;
-  unsigned int sleep;
+  
+  // The context that needs to be saved when in a blocked state.
+  // A task can only be in one state at a time so a union is used to save space.
+  union
+  {
+    unsigned int sleep;
+    channel_context_t channel;
+  };
 } task_t;
 
 #endif

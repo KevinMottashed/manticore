@@ -14,7 +14,7 @@
 
 #include <stdint.h>
 
-SyscallContext_t syscallContext;
+syscall_context_t syscallContext;
 
 void yield(void)
 {

@@ -23,14 +23,14 @@
 #define SYSCALL_CHANNEL_RECV (6) // Receive a message from a channel
 #define SYSCALL_CHANNEL_RPLY (7) // Reply to a message on a channel
 
-typedef union SyscallContext_u
+typedef union syscall_context_u
 {
   unsigned int sleep;
   mutex_t * mutex;
   channel_context_t channel;
-} SyscallContext_t;
+} syscall_context_t;
 
-extern SyscallContext_t syscallContext;
+extern syscall_context_t syscallContext;
 
 void yield(void);
 

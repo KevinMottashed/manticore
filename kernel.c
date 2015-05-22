@@ -49,7 +49,16 @@ static pqueue_t readyQueue;
 static vector_t sleepVector;
 
 static void kernel_update_sleep(unsigned int ticks);
+
+// Handle the various system calls
 static void kernel_handle_syscall(uint8_t value);
+static void kernel_handle_yield(void);
+static void kernel_handle_sleep(void);
+static void kernel_handle_mutex_lock(void);
+static void kernel_handle_mutex_unlock(void);
+static void kernel_handle_channel_send(void);
+static void kernel_handle_channel_recv(void);
+static void kernel_handle_channel_reply(void);
 
 void kernel_init(void)
 {
@@ -235,132 +244,157 @@ void kernel_handle_syscall(uint8_t value)
   {
   case SYSCALL_NONE:
   case SYSCALL_YIELD:
-    // There's nothing special to do here. One of the following occured:
-    // 1. The time slice expired.
-    // 2. A task yielded the remainder of its time slice.
-    // 3. The systick expired but no tasks were running.
-    // Either way, the active task is no longer running.
-    if (runningTask != NULL)
-    {
-      runningTask->state = STATE_READY;
-      pqueue_push(&readyQueue, runningTask, runningTask->priority);
-    }
+    kernel_handle_yield();
     break;
   case SYSCALL_SLEEP:
-    runningTask->state = STATE_SLEEP;
-    runningTask->sleep = syscallContext.sleep * SYSTICK_RELOAD_MS;
-    vector_push_back(&sleepVector, runningTask);
+    kernel_handle_sleep();
     break;
   case SYSCALL_MUTEX_LOCK:
-    {
-      // Add the active task to the queue of tasks waiting for the mutex.
-      mutex_t * mutex = syscallContext.mutex;      
-      runningTask->state = STATE_MUTEX;
-      pqueue_push(&mutex->queue, runningTask, runningTask->priority);
-      break;
-    }
+    kernel_handle_mutex_lock();
+    break;
   case SYSCALL_MUTEX_UNLOCK:
-    {
-      mutex_t * mutex = syscallContext.mutex;
-      
-      // Unblock the next highest priority task waiting for this mutex.
-      task_t * next = pqueue_pop(&mutex->queue);
-      next->state = STATE_READY;
-      pqueue_push(&readyQueue, next, next->priority);
-      
-      // A task is still ready after unlocking a mutex.
-      runningTask->state = STATE_READY;
-      pqueue_push(&readyQueue, runningTask, runningTask->priority);
-      break;
-    }
+    kernel_handle_mutex_unlock();
+    break;
   case SYSCALL_CHANNEL_SEND:
-    {
-      // Save the message and channel
-      runningTask->channel.c = syscallContext.channel.c;
-      runningTask->channel.msg = syscallContext.channel.msg;
-      runningTask->channel.len = syscallContext.channel.len;
-      runningTask->channel.reply = syscallContext.channel.reply;
-      runningTask->channel.replyLen = syscallContext.channel.replyLen;      
-      
-      task_t * recv = runningTask->channel.c->receive;
-      if (recv != NULL)
-      {
-        // There's a task waiting for a message.
-        recv->state = STATE_READY;
-        pqueue_push(&readyQueue, recv, recv->priority);
-        runningTask->channel.c->receive = NULL;
-        
-        // The sending task becomes reply blocked.
-        runningTask->state = STATE_CHANNEL_RPLY;
-        recv->channel.c->reply = runningTask;
-        
-        // Copy the message from the sender to the receiver.
-        assert(recv->channel.len >= runningTask->channel.len);
-        memcpy(recv->channel.msg, runningTask->channel.msg, runningTask->channel.len);
-      }
-      else
-      {
-        // No task is waiting for a message.
-        runningTask->state = STATE_CHANNEL_SEND;
-        pqueue_push(&runningTask->channel.c->sendQueue, runningTask, runningTask->priority);
-      }
-      break;
-    }
+    kernel_handle_channel_send();
+    break;
   case SYSCALL_CHANNEL_RECV:
-    {
-      // Save the message and channel
-      runningTask->channel.c = syscallContext.channel.c;
-      runningTask->channel.msg = syscallContext.channel.msg;
-      runningTask->channel.len = syscallContext.channel.len;
-      
-      task_t * send = pqueue_pop(&runningTask->channel.c->sendQueue);
-      if (send != NULL)
-      {
-        // A task has already sent a message to this channel.
-        runningTask->state = STATE_READY;
-        pqueue_push(&readyQueue, runningTask, runningTask->priority);
-        
-        // The task that sent the message becomes reply blocked.
-        runningTask->channel.c->reply = send;
-        send->state = STATE_CHANNEL_RPLY;
-        
-        // Copy the message from the sender to the receiver.
-        assert(runningTask->channel.len >= send->channel.len);
-        memcpy(runningTask->channel.msg, send->channel.msg, send->channel.len);
-      }
-      else
-      {
-        // No one has sent us a message :-(
-        // We become receive blocked.
-        runningTask->state = STATE_CHANNEL_RECV;
-        runningTask->channel.c->receive = runningTask;
-      }
-      break;
-    }
+    kernel_handle_channel_recv();
+    break;
   case SYSCALL_CHANNEL_RPLY:
-    {
-      channel_t * channel = syscallContext.channel.c;
-      void * msg = syscallContext.channel.msg;
-      size_t len = syscallContext.channel.len;
-      
-      // Copy the reply to the task that sent us a message.
-      task_t * replyTask = channel->reply;
-      assert(replyTask != NULL);
-      assert(replyTask->channel.len >= len);
-      memcpy(replyTask->channel.reply, msg, len);
-      *replyTask->channel.replyLen = len;
-      channel->reply = NULL;
-      
-      // The task we replied to becomes unblocked.
-      replyTask->state = STATE_READY;
-      pqueue_push(&readyQueue, replyTask, replyTask->priority);
-      
-      // The task that replied is still ready.
-      runningTask->state = STATE_READY;      
-      pqueue_push(&readyQueue, runningTask, runningTask->priority);
-      break;
-    }
+    kernel_handle_channel_reply();
+    break;
   default:
     assert(false);
   }
+}
+
+void kernel_handle_yield(void)
+{
+  // There's nothing special to do here. One of the following occured:
+  // 1. The time slice expired.
+  // 2. A task yielded the remainder of its time slice.
+  // 3. The systick expired but no tasks were running.
+  // Either way, the active task is no longer running.
+  if (runningTask != NULL)
+  {
+    runningTask->state = STATE_READY;
+    pqueue_push(&readyQueue, runningTask, runningTask->priority);
+  }
+}
+
+void kernel_handle_sleep(void)
+{
+  runningTask->state = STATE_SLEEP;
+  runningTask->sleep = syscallContext.sleep * SYSTICK_RELOAD_MS;
+  vector_push_back(&sleepVector, runningTask);
+}
+
+void kernel_handle_mutex_lock(void)
+{
+  // Add the active task to the queue of tasks waiting for the mutex.
+  mutex_t * mutex = syscallContext.mutex;
+  runningTask->state = STATE_MUTEX;
+  pqueue_push(&mutex->queue, runningTask, runningTask->priority);
+}
+
+void kernel_handle_mutex_unlock(void)
+{
+  mutex_t * mutex = syscallContext.mutex;
+  
+  // Unblock the next highest priority task waiting for this mutex.
+  task_t * next = pqueue_pop(&mutex->queue);
+  next->state = STATE_READY;
+  pqueue_push(&readyQueue, next, next->priority);
+      
+  // A task is still ready after unlocking a mutex.
+  runningTask->state = STATE_READY;
+  pqueue_push(&readyQueue, runningTask, runningTask->priority);
+}
+
+void kernel_handle_channel_send(void)
+{
+  // Save the message and channel
+  runningTask->channel.c = syscallContext.channel.c;
+  runningTask->channel.msg = syscallContext.channel.msg;
+  runningTask->channel.len = syscallContext.channel.len;
+  runningTask->channel.reply = syscallContext.channel.reply;
+  runningTask->channel.replyLen = syscallContext.channel.replyLen;      
+      
+  task_t * recv = runningTask->channel.c->receive;
+  if (recv != NULL)
+  {
+    // There's a task waiting for a message.
+    recv->state = STATE_READY;
+    pqueue_push(&readyQueue, recv, recv->priority);
+    runningTask->channel.c->receive = NULL;
+        
+    // The sending task becomes reply blocked.
+    runningTask->state = STATE_CHANNEL_RPLY;
+    recv->channel.c->reply = runningTask;
+        
+    // Copy the message from the sender to the receiver.
+    assert(recv->channel.len >= runningTask->channel.len);
+    memcpy(recv->channel.msg, runningTask->channel.msg, runningTask->channel.len);
+  }
+  else
+  {
+    // No task is waiting for a message.
+    runningTask->state = STATE_CHANNEL_SEND;
+    pqueue_push(&runningTask->channel.c->sendQueue, runningTask, runningTask->priority);
+  }
+}
+
+void kernel_handle_channel_recv(void)
+{
+  // Save the message and channel
+  runningTask->channel.c = syscallContext.channel.c;
+  runningTask->channel.msg = syscallContext.channel.msg;
+  runningTask->channel.len = syscallContext.channel.len;
+      
+  task_t * send = pqueue_pop(&runningTask->channel.c->sendQueue);
+  if (send != NULL)
+  {
+    // A task has already sent a message to this channel.
+    runningTask->state = STATE_READY;
+    pqueue_push(&readyQueue, runningTask, runningTask->priority);
+        
+    // The task that sent the message becomes reply blocked.
+    runningTask->channel.c->reply = send;
+    send->state = STATE_CHANNEL_RPLY;
+        
+    // Copy the message from the sender to the receiver.
+    assert(runningTask->channel.len >= send->channel.len);
+    memcpy(runningTask->channel.msg, send->channel.msg, send->channel.len);
+  }
+  else
+  {
+    // No one has sent us a message :-(
+    // We become receive blocked.
+    runningTask->state = STATE_CHANNEL_RECV;
+    runningTask->channel.c->receive = runningTask;
+  }
+}
+
+void kernel_handle_channel_reply(void)
+{
+  channel_t * channel = syscallContext.channel.c;
+  void * msg = syscallContext.channel.msg;
+  size_t len = syscallContext.channel.len;
+  
+  // Copy the reply to the task that sent us a message.
+  task_t * replyTask = channel->reply;
+  assert(replyTask != NULL);
+  assert(replyTask->channel.len >= len);
+  memcpy(replyTask->channel.reply, msg, len);
+  *replyTask->channel.replyLen = len;
+  channel->reply = NULL;
+  
+  // The task we replied to becomes unblocked.
+  replyTask->state = STATE_READY;
+  pqueue_push(&readyQueue, replyTask, replyTask->priority);
+  
+  // The task that replied is still ready.
+  runningTask->state = STATE_READY;      
+  pqueue_push(&readyQueue, runningTask, runningTask->priority);
 }

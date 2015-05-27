@@ -41,5 +41,9 @@ size_t pqueue_size(const pqueue_t * q);
 void pqueue_push(pqueue_t * q, void * data, int priority);
 void * pqueue_pop(pqueue_t * q);
 void * pqueue_top(pqueue_t * q);
+void * pqueue_at(pqueue_t * q, size_t position);
+
+// Changes the priority of an element already in the queue.
+void pqueue_reschedule(pqueue_t * q, void * data, int priority);
 
 #endif

@@ -2145,6 +2145,9 @@
     <name>$PROJ_DIR$\systick.s</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\task.c</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\task_busy_yield.s</name>
   </file>
   <file>

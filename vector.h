@@ -37,6 +37,9 @@ void vector_push_back(vector_t * v, void * data);
 void * vector_pop_back(vector_t * v);
 void vector_erase(vector_t * v, size_t index);
 
+// Removes the first element with value <data>
+void vector_remove(vector_t * v, void * data);
+
 // Access
 void * vector_at(vector_t * v, size_t index);
 void * vector_front(vector_t * v);

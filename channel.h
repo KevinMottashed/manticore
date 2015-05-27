@@ -27,6 +27,7 @@ typedef struct channel_s
   pqueue_t sendQueue; // The queue of tasks that have sent messages.
   struct task_s * receive; // The task waiting for a message.
   struct task_s * reply; // The task waiting for a reply.
+  struct task_s * server; // The task currently handing a message.
 } channel_t;
 
 void channel_init(channel_t * c);

@@ -21,7 +21,7 @@
 #include <assert.h>
 
 // 128 bytes of stack should be enough for these dummy tasks.
-#define NUM_TASKS (7)
+#define NUM_TASKS (8)
 #define STACK_SIZE (128)
 
 // This collection of tasks are used to test the system.
@@ -33,6 +33,7 @@ static __task void task_led3(void * arg);
 static __task void task_led4(void * arg);
 static __task void task_never(void * arg);
 static __task void task_mutex_lock(void * arg);
+static __task void task_mutex_lock2(void * arg);
 static __task void task_led_server(void * arg);
 
 // ARM requires 8 byte alignment for the stack.
@@ -89,7 +90,7 @@ __task void task_led3(void * arg)
     channel_send(&ledChannel, &cmd, sizeof(cmd), &reply, &replyLen);
     assert(replyLen == sizeof(reply));
     assert(reply.ok);
-    sleep(x);
+    delay(x);
     on = !on;
   }
 }
@@ -109,7 +110,7 @@ __task void task_led4(void * arg)
     channel_send(&ledChannel, &cmd, sizeof(cmd), &reply, &replyLen);
     assert(replyLen == sizeof(reply));
     assert(reply.ok);
-    sleep(x);
+    delay(x);
     on = !on;
   }
 }
@@ -132,6 +133,25 @@ __task void task_mutex_lock(void * arg)
   }
 }
 
+__task void task_mutex_lock2(void * arg)
+{
+  // This task locks and unlocks a mutex.
+  while (true)
+  {
+    mutex_lock(&mutex);
+    delay(200);
+    
+    // task_mutex_lock() should be blocked on us
+    assert(runningTask->priority == 12);
+    
+    mutex_unlock(&mutex);
+    
+    // We should be back to our original priority.
+    assert(runningTask->priority == 10);
+    delay(200);
+  }
+}
+
 __task void task_led_server(void * arg)
 {
   // This task receives messages on a channel to turn LEDs on and off.
@@ -142,29 +162,37 @@ __task void task_led_server(void * arg)
     channel_recv(&ledChannel, &cmd, sizeof(cmd));
     if (cmd.led == 3 && cmd.state == true)
     {
+      // We should have inherited the priority of the sender.
+      assert(runningTask->priority == 15);
       gpio_led3_on();
       reply.ok = true;
     }
     else if (cmd.led == 3 && cmd.state == false)
     {
+      assert(runningTask->priority == 15);
       gpio_led3_off();
       reply.ok = true;
     }
     else if (cmd.led == 4 && cmd.state == true)
     {
+      assert(runningTask->priority == 20);
       gpio_led4_on();
       reply.ok = true;
     }
     else if (cmd.led == 4 && cmd.state == false)
     {
+      assert(runningTask->priority == 20);
       gpio_led4_off();
       reply.ok = true;
-    }    
+    }
     else
     {
       reply.ok = false;
     }
     channel_reply(&ledChannel, &reply, sizeof(reply));
+    
+    // We should be back to our original priority.
+    assert(runningTask->priority == 10);
   }
 }
 
@@ -188,11 +216,12 @@ int main()
   //                 Entry                 Argument   Stack      Stack Size  Priority
   kernel_create_task(&Task_Busy_Yield,     NULL,      stacks[0], STACK_SIZE, 10);
   kernel_create_task(&task_mutex_try_lock, NULL,      stacks[1], STACK_SIZE, 10);
-  kernel_create_task(&task_led3,           (void*)3,  stacks[2], STACK_SIZE, 15);
-  kernel_create_task(&task_led4,           (void*)5,  stacks[3], STACK_SIZE, 20);
+  kernel_create_task(&task_led3,           (void*)30, stacks[2], STACK_SIZE, 15);
+  kernel_create_task(&task_led4,           (void*)50, stacks[3], STACK_SIZE, 20);
   kernel_create_task(&task_never,          NULL,      stacks[4], STACK_SIZE, 5);
-  kernel_create_task(&task_mutex_lock,     NULL,      stacks[5], STACK_SIZE, 10);
-  kernel_create_task(&task_led_server,     NULL,      stacks[6], STACK_SIZE, 10);
+  kernel_create_task(&task_mutex_lock,     NULL,      stacks[5], STACK_SIZE, 12);
+  kernel_create_task(&task_mutex_lock2,    NULL,      stacks[6], STACK_SIZE, 10);
+  kernel_create_task(&task_led_server,     NULL,      stacks[7], STACK_SIZE, 10);
   
   // Start the kernel.
   kernel_main();

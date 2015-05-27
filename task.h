@@ -14,6 +14,7 @@
 #include "system.h"
 #include "mutex.h"
 #include "channel.h"
+#include "vector.h"
 
 #include <stdint.h>
 
@@ -77,15 +78,36 @@ typedef struct task_s
   uint32_t id;
   uint32_t stackPointer;
   task_state_t state;
+  
+  // The provisioned and real priorities. The real priority is updated
+  // via priority inheritence when other tasks block/unblock on this task.
+  uint8_t provisionedPriority;
   uint8_t priority;
+  
+  // The tasks that are blocked on this task.
+  struct vector_s blocked;
   
   // The context that needs to be saved when in a blocked state.
   // A task can only be in one state at a time so a union is used to save space.
   union
   {
     unsigned int sleep;
+    struct mutex_s * mutex;
     channel_context_t channel;
   };
 } task_t;
+
+// A task has (un)blocked on this task. This will add/remove the task to the list
+// of blocked tasks and will return true if the tasks priority has changed.
+bool task_add_blocked(task_t * task, task_t * blocked);
+bool task_remove_blocked(task_t * task, task_t * unblocked);
+
+// Notifies <task> that the priority of <blocked> has changed.
+bool task_update_blocked(task_t * task, task_t * blocked);
+
+// Reschedule a task. A task needs to be rescheduled after its priority
+// has changed. This should be called whenever task_add_blocked(),
+// task_remove_blocked() or task_update_blocked() returns true.
+void task_reschedule(task_t * task);
 
 #endif

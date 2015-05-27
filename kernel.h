@@ -11,6 +11,9 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
+#include "pqueue.h"
+#include "task.h"
+
 #include <stdint.h>
 
 // The __task specifier informs the compiler that the function is an
@@ -22,5 +25,8 @@ void kernel_init(void);
 void kernel_main(void);
 
 void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, uint8_t priority);
+
+extern pqueue_t readyQueue;
+extern task_t * runningTask;
 
 #endif

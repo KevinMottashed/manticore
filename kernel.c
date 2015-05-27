@@ -44,8 +44,8 @@
 volatile uint8_t syscallValue;
 volatile uint32_t * savedStackPointer;
 
-static task_t * runningTask;
-static pqueue_t readyQueue;
+task_t * runningTask;
+pqueue_t readyQueue;
 static vector_t sleepVector;
 
 static void kernel_update_sleep(unsigned int ticks);
@@ -103,6 +103,7 @@ void kernel_main(void)
       // to run. This ensures the CPU is shared between all the 
       // highest priority tasks.
       task_t * temp = pqueue_top(&readyQueue);
+      assert(temp != NULL);
       if (temp != NULL && temp->priority == nextTask->priority)
       {
         sleep = TIME_SLICE_TICKS;
@@ -192,6 +193,7 @@ void kernel_main(void)
 
 void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
 {
+  assert(stack != NULL);
   assert(stackSize >= sizeof(context_t));
   
   context_t context;
@@ -206,11 +208,13 @@ void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, ui
   static uint8_t taskIdCounter = 0;
   task->id = taskIdCounter++;
   task->state = STATE_READY;
+  task->provisionedPriority = priority;
   task->priority = priority;
   task->stackPointer = (uint32_t)stack + stackSize;
   task->stackPointer &= ~0x7; // The stack must be 8 byte aligned.
   task->stackPointer -= sizeof(context_t);
   memcpy((void*)task->stackPointer, &context, sizeof(context));
+  vector_init(&task->blocked);
   
   // Add the task to the queue of ready tasks.
   pqueue_push(&readyQueue, task, task->priority);
@@ -292,50 +296,94 @@ void kernel_handle_sleep(void)
 
 void kernel_handle_mutex_lock(void)
 {
-  // Add the active task to the queue of tasks waiting for the mutex.
   mutex_t * mutex = syscallContext.mutex;
+  assert(mutex != NULL);
+  
+  // Add the active task to the queue of tasks waiting for the mutex.
   runningTask->state = STATE_MUTEX;
+  runningTask->mutex = mutex;
   pqueue_push(&mutex->queue, runningTask, runningTask->priority);
+  
+  // The owner of the mutex is now blocking whoever tried to lock it.
+  bool reschedule = task_add_blocked(mutex->owner, runningTask);
+  if (reschedule)
+  {
+    task_reschedule(mutex->owner);
+  }
 }
 
 void kernel_handle_mutex_unlock(void)
 {
   mutex_t * mutex = syscallContext.mutex;
+  assert(mutex != NULL);
   
   // Unblock the next highest priority task waiting for this mutex.
-  task_t * next = pqueue_pop(&mutex->queue);
-  next->state = STATE_READY;
-  pqueue_push(&readyQueue, next, next->priority);
-      
+  task_t * newOwner = pqueue_pop(&mutex->queue);
+  assert(newOwner != NULL);
+  newOwner->state = STATE_READY;
+  pqueue_push(&readyQueue, newOwner, newOwner->priority);
+  
   // A task is still ready after unlocking a mutex.
   runningTask->state = STATE_READY;
   pqueue_push(&readyQueue, runningTask, runningTask->priority);
+  
+  // The previous owner of the mutex is no longer blocking tasks waiting
+  // for the mutex. The new owner of the mutex is now blocking all those tasks.
+  bool rescheduleOldOwner = false;
+  bool rescheduleNewOwner = false;
+  task_t * oldOwner = mutex->owner;
+  mutex->owner = newOwner;
+  rescheduleOldOwner = task_remove_blocked(oldOwner, newOwner);
+  for (int i = 0; i < pqueue_size(&mutex->queue); ++i)
+  {
+    task_t * waiter = pqueue_at(&mutex->queue, i);
+    rescheduleOldOwner |= task_remove_blocked(oldOwner, waiter);
+    rescheduleNewOwner |= task_add_blocked(newOwner, waiter);
+  }
+  if (rescheduleOldOwner)
+  {
+    task_reschedule(oldOwner);
+  }
+  if (rescheduleNewOwner)
+  {
+    task_reschedule(newOwner);
+  }
 }
 
 void kernel_handle_channel_send(void)
 {
   // Save the message and channel
-  runningTask->channel.c = syscallContext.channel.c;
+  channel_t * channel = syscallContext.channel.c;
+  runningTask->channel.c = channel;
   runningTask->channel.msg = syscallContext.channel.msg;
   runningTask->channel.len = syscallContext.channel.len;
   runningTask->channel.reply = syscallContext.channel.reply;
-  runningTask->channel.replyLen = syscallContext.channel.replyLen;      
+  runningTask->channel.replyLen = syscallContext.channel.replyLen;
       
-  task_t * recv = runningTask->channel.c->receive;
+  task_t * recv = channel->receive;
   if (recv != NULL)
   {
     // There's a task waiting for a message.
     recv->state = STATE_READY;
     pqueue_push(&readyQueue, recv, recv->priority);
-    runningTask->channel.c->receive = NULL;
-        
+    channel->receive = NULL;
+    channel->server = recv;
+
     // The sending task becomes reply blocked.
     runningTask->state = STATE_CHANNEL_RPLY;
-    recv->channel.c->reply = runningTask;
+    channel->reply = runningTask;
         
     // Copy the message from the sender to the receiver.
     assert(recv->channel.len >= runningTask->channel.len);
     memcpy(recv->channel.msg, runningTask->channel.msg, runningTask->channel.len);
+    
+    // The receiver is now blocking the sender;
+    bool reschedule = task_add_blocked(recv, runningTask);
+    if (reschedule)
+    {
+      task_reschedule(recv);
+    }
+    assert(recv->priority > 10);
   }
   else
   {
@@ -361,11 +409,20 @@ void kernel_handle_channel_recv(void)
         
     // The task that sent the message becomes reply blocked.
     runningTask->channel.c->reply = send;
+    runningTask->channel.c->server = runningTask;
     send->state = STATE_CHANNEL_RPLY;
-        
+    
     // Copy the message from the sender to the receiver.
     assert(runningTask->channel.len >= send->channel.len);
     memcpy(runningTask->channel.msg, send->channel.msg, send->channel.len);
+    
+    // The receiver is now blocking the sender.
+    bool reschedule = task_add_blocked(runningTask, send);
+    if (reschedule)
+    {
+      task_reschedule(runningTask);
+    }
+    assert(runningTask->priority > 10);
   }
   else
   {
@@ -389,6 +446,7 @@ void kernel_handle_channel_reply(void)
   memcpy(replyTask->channel.reply, msg, len);
   *replyTask->channel.replyLen = len;
   channel->reply = NULL;
+  channel->server = NULL;
   
   // The task we replied to becomes unblocked.
   replyTask->state = STATE_READY;
@@ -397,4 +455,11 @@ void kernel_handle_channel_reply(void)
   // The task that replied is still ready.
   runningTask->state = STATE_READY;      
   pqueue_push(&readyQueue, runningTask, runningTask->priority);
+  
+  // The task that replied is now longer blocking the sender.
+  bool reschedule = task_remove_blocked(runningTask, replyTask);
+  if (reschedule)
+  {
+    task_reschedule(runningTask);
+  }
 }

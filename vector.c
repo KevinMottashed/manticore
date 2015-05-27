@@ -92,3 +92,17 @@ void * vector_back(vector_t * v)
   return v->array[v->size - 1];  
 }
 
+void vector_remove(vector_t * v, void * data)
+{
+  assert(v != NULL);
+  for (int i = 0; i < v->size; ++i)
+  {
+    if (v->array[i] == data)
+    {
+      vector_erase(v, i);
+      return;
+    }
+  }
+  return;
+}
+

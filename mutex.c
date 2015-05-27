@@ -19,6 +19,7 @@
 #include "system.h"
 #include "syscall.h"
 #include "utils.h"
+#include "kernel.h"
 
 void mutex_init(mutex_t * mutex)
 {
@@ -39,6 +40,7 @@ void mutex_lock(mutex_t * mutex)
   {
     // The mutex is unlocked. Just take it.
     mutex->locked = true;
+    mutex->owner = runningTask;
     
     // Reenable the systick ISR.
     SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
@@ -84,6 +86,8 @@ bool mutex_trylock(mutex_t * mutex)
   else
   {
     mutex->locked = true;
+    mutex->owner = runningTask;
+    
     SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
     __DSB();
     __ISB();
@@ -115,6 +119,8 @@ void mutex_unlock(mutex_t * mutex)
   {
     // No one is waiting for this mutex.
     mutex->locked = false;
+    mutex->owner = NULL;
+    
     SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
     __DSB();
     __ISB();

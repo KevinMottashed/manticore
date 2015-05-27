@@ -14,9 +14,13 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdint.h>
 
 #define MIN_PQUEUE_ALLOC (8)
 
+// Sanity check.
+// Should be used in assert() statements to make sure the queue is sane.
+static bool pqueue_check(pqueue_t * q);
 
 void pqueue_init(pqueue_t * q)
 {
@@ -71,6 +75,7 @@ void pqueue_push(pqueue_t * q, void * data, int priority)
   q->elements[position].data = data;
   q->elements[position].priority = priority;
   q->numElements++;
+  assert(pqueue_check(q));
   return;  
 }
 
@@ -94,6 +99,8 @@ void * pqueue_pop(pqueue_t * q)
     memmove(dest, src, len);
   }
   
+  assert(pqueue_check(q));
+  
   // TBD: Reallocate q->elements if it's mostly empty?
   return result;
 }
@@ -105,4 +112,106 @@ void * pqueue_top(pqueue_t * q)
     return NULL;
   }
   return q->elements[0].data;
+}
+   
+void * pqueue_at(pqueue_t * q, size_t position)
+{
+  assert(q != NULL);
+  return q->elements[position].data;
+}
+
+void pqueue_reschedule(pqueue_t * q, void * data, int priority)
+{
+  assert(q != NULL);
+  assert(data != NULL);
+  
+  int newPos = -1;
+  int oldPos = -1;
+  
+  // We iterate through the elements until we find where the element
+  // currently is and where it needs to go.
+  for (int i = 0; i < q->numElements; ++i)
+  {
+    if (data == q->elements[i].data)
+    {
+      // We found the element to move.
+      oldPos = i;
+      
+      if (priority == q->elements[i].priority)
+      {
+        // The old and new priorities are the same.
+        return;
+      }
+      
+      if (newPos != -1)
+      {
+        // Found both positions.
+        break;
+      }
+      
+      if ((i + 1 < q->numElements && priority >= q->elements[i+1].priority) ||
+           i + 1 == q->numElements)
+      {
+        // The element is already in the right position because the next
+        // element has a lower priority or the element is already the 
+        // last in the queue.
+        q->elements[i].priority = priority;
+        assert(pqueue_check(q));
+        return;
+      }
+    }
+    
+    if (priority > q->elements[i].priority && newPos == -1)
+    {
+      // We found the new position for this element.
+      newPos = i;
+      if (oldPos != -1)
+      {
+        // Found both positions.
+        break;
+      }
+    }
+  }
+  
+  if (newPos == -1)
+  {
+    newPos = q->numElements;
+  }
+  
+  assert(oldPos != -1);
+  assert(newPos != oldPos);
+  
+  // Shift all elements between old and new up/down by one position.
+  // This will overwrite the old element and free a spot at the new position.
+  if (oldPos > newPos)
+  {
+    memmove(&q->elements[newPos+1], 
+            &q->elements[newPos], 
+            (oldPos - newPos) * sizeof(q->elements[0]));
+  }
+  else // newPos > oldPos
+  {
+    newPos--;
+    memmove(&q->elements[oldPos], 
+            &q->elements[oldPos+1], 
+            (newPos - oldPos) * sizeof(q->elements[0]));
+  }
+  q->elements[newPos].data = data;
+  q->elements[newPos].priority = priority;
+  assert(pqueue_check(q));
+  return;
+}
+
+bool pqueue_check(pqueue_t * q)
+{
+  uint8_t lastPriority = 255;
+  for (int i = 0; i < q->numElements; ++i)
+  {
+    if (q->elements[i].priority > lastPriority)
+    {
+      return false;
+    }
+    lastPriority = q->elements[i].priority;
+  }
+  return true;
 }

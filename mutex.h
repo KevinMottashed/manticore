@@ -13,6 +13,7 @@
 #define MUTEX_H
 
 #include "pqueue.h"
+#include "task.h"
    
 #include <stdint.h>
 #include <stdbool.h>
@@ -21,6 +22,7 @@ typedef struct mutex_s
 {
   uint8_t id; // Unique identifier for this mutex.
   bool locked;
+  struct task_s * owner; // The task that owns this mutex.
   pqueue_t queue; // The queue of blocked tasks waiting for this mutex.
 } mutex_t;
 

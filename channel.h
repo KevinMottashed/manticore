@@ -30,21 +30,4 @@ typedef struct channel_s
   struct task_s * server; // The task currently handing a message.
 } channel_t;
 
-void channel_init(channel_t * c);
-
-// Send a message to a channel.
-// This call will block until another task replies to the message.
-void channel_send(channel_t * c,
-                  void * data,
-                  size_t len,
-                  void * reply,
-                  size_t * replyLen);
-
-// Receive a message from a channel.
-// This call will block if no task has sent a message to us.
-void channel_recv(channel_t * c, void * data, size_t len);
-
-// Reply to a message.
-void channel_reply(channel_t * c, void * data, size_t len);
-
 #endif

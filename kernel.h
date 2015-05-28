@@ -26,7 +26,5 @@ void kernel_scheduler_enable(void);
 
 extern pqueue_t readyQueue;
 extern task_t * runningTask;
-extern syscall_context_t syscallContext;
-
 
 #endif

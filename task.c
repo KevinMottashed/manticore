@@ -50,10 +50,7 @@ uint8_t task_get_priority(task_handle_t task)
 
 void task_yield(void)
 {
-  kernel_scheduler_disable();
-  
-  // Execute the system call
-  asm("SVC #1");
+  SVC_YIELD();
 }
 
 void task_sleep(unsigned int seconds)
@@ -64,14 +61,9 @@ void task_sleep(unsigned int seconds)
 
 void task_delay(unsigned int ms)
 {
-  kernel_scheduler_disable();
-  
-  syscallContext.sleep = ms;
-  
-  // Execute the system call
-  asm("SVC #2");
+  runningTask->sleep = ms;
+  SVC_SLEEP();
 }
-
 
 bool task_add_blocked(task_t * task, task_t * blocked)
 {

@@ -34,32 +34,26 @@ channel_handle_t channel_create(void)
 
 void channel_send(channel_t * c, void * msg, size_t len, void * reply, size_t * replyLen)
 {
-  kernel_scheduler_disable();
-  
-  syscallContext.channel.c = c;
-  syscallContext.channel.msg = msg;
-  syscallContext.channel.len = len;
-  syscallContext.channel.reply = reply;
-  syscallContext.channel.replyLen = replyLen;
+  runningTask->channel.c = c;
+  runningTask->channel.msg = msg;
+  runningTask->channel.len = len;
+  runningTask->channel.reply = reply;
+  runningTask->channel.replyLen = replyLen;
   SVC_CHANNEL_SEND();
 }
 
 void channel_recv(channel_t * c, void * msg, size_t len)
 {
-  kernel_scheduler_disable();
-  
-  syscallContext.channel.c = c;
-  syscallContext.channel.msg = msg;
-  syscallContext.channel.len = len;
+  runningTask->channel.c = c;
+  runningTask->channel.msg = msg;
+  runningTask->channel.len = len;
   SVC_CHANNEL_RECV();
 }
 
 void channel_reply(channel_t * c, void * msg, size_t len)
 {
-  kernel_scheduler_disable();
-  
-  syscallContext.channel.c = c;
-  syscallContext.channel.msg = msg;
-  syscallContext.channel.len = len;
+  runningTask->channel.c = c;
+  runningTask->channel.msg = msg;
+  runningTask->channel.len = len;
   SVC_CHANNEL_REPLY();
 }

@@ -48,7 +48,6 @@ volatile uint32_t * savedStackPointer;
 
 task_t * runningTask;
 pqueue_t readyQueue;
-syscall_context_t syscallContext;
 
 static vector_t sleepVector;
 
@@ -265,18 +264,17 @@ void kernel_handle_yield(void)
 void kernel_handle_sleep(void)
 {
   runningTask->state = STATE_SLEEP;
-  runningTask->sleep = syscallContext.sleep * SYSTICK_RELOAD_MS;
+  runningTask->sleep *= SYSTICK_RELOAD_MS;
   vector_push_back(&sleepVector, runningTask);
 }
 
 void kernel_handle_mutex_lock(void)
 {
-  mutex_t * mutex = syscallContext.mutex;
+  mutex_t * mutex = runningTask->mutex;
   assert(mutex != NULL);
   
   // Add the active task to the queue of tasks waiting for the mutex.
   runningTask->state = STATE_MUTEX;
-  runningTask->mutex = mutex;
   pqueue_push(&mutex->queue, runningTask, runningTask->priority);
   
   // The owner of the mutex is now blocking whoever tried to lock it.
@@ -289,7 +287,7 @@ void kernel_handle_mutex_lock(void)
 
 void kernel_handle_mutex_unlock(void)
 {
-  mutex_t * mutex = syscallContext.mutex;
+  mutex_t * mutex = runningTask->mutex;
   assert(mutex != NULL);
   
   // Unblock the next highest priority task waiting for this mutex.
@@ -328,12 +326,7 @@ void kernel_handle_mutex_unlock(void)
 void kernel_handle_channel_send(void)
 {
   // Save the message and channel
-  channel_t * channel = syscallContext.channel.c;
-  runningTask->channel.c = channel;
-  runningTask->channel.msg = syscallContext.channel.msg;
-  runningTask->channel.len = syscallContext.channel.len;
-  runningTask->channel.reply = syscallContext.channel.reply;
-  runningTask->channel.replyLen = syscallContext.channel.replyLen;
+  channel_t * channel = runningTask->channel.c;
       
   task_t * recv = channel->receive;
   if (recv != NULL)
@@ -370,11 +363,6 @@ void kernel_handle_channel_send(void)
 
 void kernel_handle_channel_recv(void)
 {
-  // Save the message and channel
-  runningTask->channel.c = syscallContext.channel.c;
-  runningTask->channel.msg = syscallContext.channel.msg;
-  runningTask->channel.len = syscallContext.channel.len;
-      
   task_t * send = pqueue_pop(&runningTask->channel.c->sendQueue);
   if (send != NULL)
   {
@@ -409,9 +397,9 @@ void kernel_handle_channel_recv(void)
 
 void kernel_handle_channel_reply(void)
 {
-  channel_t * channel = syscallContext.channel.c;
-  void * msg = syscallContext.channel.msg;
-  size_t len = syscallContext.channel.len;
+  channel_t * channel = runningTask->channel.c;
+  void * msg = runningTask->channel.msg;
+  size_t len = runningTask->channel.len;
   
   // Copy the reply to the task that sent us a message.
   task_t * replyTask = channel->reply;

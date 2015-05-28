@@ -31,26 +31,4 @@
 #define SVC_CHANNEL_RECV()    asm ("SVC #6")
 #define SVC_CHANNEL_REPLY()   asm ("SVC #7")
 
-// The context that needs to be saved when send, receive or reply blocked.
-typedef struct channel_context_s
-{
-  // The channel that we're block on
-  struct channel_s * c;
-  
-  // Used for storing the send/recv buffer.
-  void * msg;
-  size_t len;
-  
-  // Used for storing the reply buffer.
-  void * reply;
-  size_t * replyLen;
-} channel_context_t;
-   
-typedef union syscall_context_u
-{
-  unsigned int sleep;
-  struct mutex_s * mutex;
-  channel_context_t channel;
-} syscall_context_t;
-
 #endif

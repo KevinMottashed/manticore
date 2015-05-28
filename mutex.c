@@ -49,7 +49,7 @@ void mutex_lock(mutex_t * mutex)
   else
   {
     // The mutex is locked. Let the OS schedule the next task.
-    syscallContext.mutex = mutex;
+    runningTask->mutex = mutex;
     SVC_MUTEX_LOCK();
   }
 }
@@ -78,7 +78,7 @@ void mutex_unlock(mutex_t * mutex)
   {
     // Another task is waiting for this mutex.
     // Let the kernel run to unblock it.
-    syscallContext.mutex = mutex;
+    runningTask->mutex = mutex;
     SVC_MUTEX_UNLOCK();
   }
   else

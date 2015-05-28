@@ -153,7 +153,7 @@ void channel_send(channel_handle_t channel,
  * @param data The buffer where the message can be stored.
  * @param len The length of the receive buffer.
  */
-void channel_recv(channel_handle_t channel, void * data, size_t len);
+size_t channel_recv(channel_handle_t channel, void * data, size_t len);
 
 /**
  * Reply to a previously received message.

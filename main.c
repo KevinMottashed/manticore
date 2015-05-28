@@ -156,7 +156,10 @@ __task void * task_led_server(void * arg)
   {
     led_cmd_t cmd;
     led_cmd_reply_t reply;
-    channel_recv(ledChannel, &cmd, sizeof(cmd));
+    
+    size_t len = channel_recv(ledChannel, &cmd, sizeof(cmd));
+    assert(len == sizeof(cmd));
+    
     if (cmd.led == 3 && cmd.state == true)
     {
       // We should have inherited the priority of the sender.

@@ -344,6 +344,7 @@ void kernel_handle_channel_send(void)
     // Copy the message from the sender to the receiver.
     assert(recv->channel.len >= runningTask->channel.len);
     memcpy(recv->channel.msg, runningTask->channel.msg, runningTask->channel.len);
+    recv->channel.len = runningTask->channel.len;
     
     // The receiver is now blocking the sender;
     bool reschedule = task_add_blocked(recv, runningTask);
@@ -378,6 +379,7 @@ void kernel_handle_channel_recv(void)
     // Copy the message from the sender to the receiver.
     assert(runningTask->channel.len >= send->channel.len);
     memcpy(runningTask->channel.msg, send->channel.msg, send->channel.len);
+    runningTask->channel.len = send->channel.len;
     
     // The receiver is now blocking the sender.
     bool reschedule = task_add_blocked(runningTask, send);

@@ -1,9 +1,77 @@
 #include "task.h"
 
+#include "manticore.h"
+
 #include "kernel.h"
 #include "utils.h"
+#include "heap.h"
 
 #include <assert.h>
+#include <string.h>
+
+task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
+{
+  assert(stack != NULL);
+  assert(stackSize >= sizeof(context_t));
+  
+  context_t context;
+  memset(&context, 0, sizeof(context)); // Most registers will start off as zero.
+  context.R0 = (uint32_t)arg;
+  context.PC = (uint32_t)entry; // The program counter starts at the task entry point.
+  context.xPSR.b.T = 1; // Enable Thumb mode.
+  
+  task_t * task = heap_malloc(sizeof(*task));
+  assert(task != NULL);
+  
+  static uint8_t taskIdCounter = 0;
+  task->id = taskIdCounter++;
+  task->state = STATE_READY;
+  task->provisionedPriority = priority;
+  task->priority = priority;
+  task->stackPointer = (uint32_t)stack + stackSize;
+  task->stackPointer &= ~0x7; // The stack must be 8 byte aligned.
+  task->stackPointer -= sizeof(context_t);
+  memcpy((void*)task->stackPointer, &context, sizeof(context));
+  vector_init(&task->blocked);
+  
+  // Add the task to the queue of ready tasks.
+  pqueue_push(&readyQueue, task, task->priority);
+  return task;
+}
+  
+uint8_t task_get_priority(task_handle_t task)
+{
+  if (task == NULL)
+  {
+    return runningTask->priority;
+  }
+  return task->priority;
+}
+
+void task_yield(void)
+{
+  kernel_scheduler_disable();
+  
+  // Execute the system call
+  asm("SVC #1");
+}
+
+void task_sleep(unsigned int seconds)
+{
+  // TODO: Test the max value. It won't work due to overflow so fix it.
+  task_delay(seconds * 1000);
+}
+
+void task_delay(unsigned int ms)
+{
+  kernel_scheduler_disable();
+  
+  syscallContext.sleep = ms;
+  
+  // Execute the system call
+  asm("SVC #2");
+}
+
 
 bool task_add_blocked(task_t * task, task_t * blocked)
 {

@@ -15,6 +15,7 @@
 #include "mutex.h"
 #include "channel.h"
 #include "vector.h"
+#include "syscall.h"
 
 #include <stdint.h>
 
@@ -57,21 +58,6 @@ typedef struct context_s
   uint32_t PC;
   xPSR_Type xPSR;
 } context_t;
-
-// The context that needs to be saved when send, receive or reply blocked.
-typedef struct channel_context_s
-{
-  // The channel that we're block on
-  struct channel_s * c;
-  
-  // Used for storing the send/recv buffer.
-  void * msg;
-  size_t len;
-  
-  // Used for storing the reply buffer.
-  void * reply;
-  size_t * replyLen;
-} channel_context_t;
 
 typedef struct task_s
 {

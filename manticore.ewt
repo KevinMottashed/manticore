@@ -2136,9 +2136,6 @@
     <name>$PROJ_DIR$\pqueue.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$\syscall.c</name>
-  </file>
-  <file>
     <name>$PROJ_DIR$\syscall_isr.s</name>
   </file>
   <file>

@@ -8,127 +8,84 @@
  * ----------------------------------------------------------------------------
  */
 
-/*
- * See section B2.5 of the ARM architecture reference manual.
- * Updates to the SCS registers require the use of DSB/ISB instructions.
- * The SysTick and SCB are part of the SCS (System control space).
- */
 
 #include "mutex.h"
+   
+#include "manticore.h"
 
 #include "system.h"
 #include "syscall.h"
 #include "utils.h"
 #include "kernel.h"
+#include "heap.h"
+   
+#include <assert.h>
 
-void mutex_init(mutex_t * mutex)
+mutex_handle_t mutex_create(void)
 {
   static uint8_t mutexIdCounter = 0;
+  
+  mutex_t * mutex = heap_malloc(sizeof(*mutex));
+  assert(mutex != NULL);
+  
   mutex->id = mutexIdCounter++;
+  mutex->owner = NULL;
   mutex->locked = false;
   pqueue_init(&mutex->queue);
+  return mutex;
 }
 
 void mutex_lock(mutex_t * mutex)
 {
-  // Disable the system tick ISR
-  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
-  __DSB();
-  __ISB();
+  kernel_scheduler_disable();
 
   if (!mutex->locked)
   {
     // The mutex is unlocked. Just take it.
     mutex->locked = true;
     mutex->owner = runningTask;
-    
-    // Reenable the systick ISR.
-    SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
-    __DSB();
-    __ISB();
-    if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
-    {
-      // Trigger the systick ISR if the timer expired
-      // while we were locking the mutex.
-      SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
-      __DSB();
-      __ISB();
-    }
+    kernel_scheduler_enable();
   }
   else
   {
     // The mutex is locked. Let the OS schedule the next task.
     syscallContext.mutex = mutex;
-    asm ("SVC #3");
+    SVC_MUTEX_LOCK();
   }
 }
 
 bool mutex_trylock(mutex_t * mutex)
 {
-  // Disable the system tick ISR
-  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
-  __DSB();
-  __ISB();
-  
+  kernel_scheduler_disable();
   if (mutex->locked)
   {
-    SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
-    __DSB();
-    __ISB();
-    if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
-    {
-      SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
-      __DSB();
-      __ISB();
-    }
+    kernel_scheduler_enable();
     return false;
   }
   else
   {
     mutex->locked = true;
     mutex->owner = runningTask;
-    
-    SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
-    __DSB();
-    __ISB();
-    if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
-    {
-      SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
-      __DSB();
-      __ISB();
-    }
+    kernel_scheduler_enable();
     return true;
   }
 }
 
 void mutex_unlock(mutex_t * mutex)
 {
-  // Disable the system tick ISR
-  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
-  __DSB();
-  __ISB();
-
+  kernel_scheduler_disable();
   if (!pqueue_empty(&mutex->queue))
   {
     // Another task is waiting for this mutex.
     // Let the kernel run to unblock it.
     syscallContext.mutex = mutex;
-    asm ("SVC #4");
+    SVC_MUTEX_UNLOCK();
   }
   else
   {
     // No one is waiting for this mutex.
     mutex->locked = false;
     mutex->owner = NULL;
-    
-    SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
-    __DSB();
-    __ISB();
-    if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
-    {
-      SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
-      __DSB();
-      __ISB();
-    }
+    kernel_scheduler_enable();
   }
 }

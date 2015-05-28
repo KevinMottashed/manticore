@@ -9,6 +9,8 @@
  */
 
 #include "kernel.h"
+   
+#include "manticore.h"
 
 #include "task.h"
 #include "system.h"
@@ -46,6 +48,8 @@ volatile uint32_t * savedStackPointer;
 
 task_t * runningTask;
 pqueue_t readyQueue;
+syscall_context_t syscallContext;
+
 static vector_t sleepVector;
 
 static void kernel_update_sleep(unsigned int ticks);
@@ -60,14 +64,14 @@ static void kernel_handle_channel_send(void);
 static void kernel_handle_channel_recv(void);
 static void kernel_handle_channel_reply(void);
 
-void kernel_init(void)
+void manticore_init(void)
 {
   // Initialize the ready queue and the vector of sleeping tasks.
   pqueue_init(&readyQueue);
   vector_init(&sleepVector);
 }
 
-void kernel_main(void)
+void manticore_main(void)
 {
   // Enable SysTick IRQ.
   SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
@@ -191,35 +195,6 @@ void kernel_main(void)
   }
 }
 
-void kernel_create_task(task t, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
-{
-  assert(stack != NULL);
-  assert(stackSize >= sizeof(context_t));
-  
-  context_t context;
-  memset(&context, 0, sizeof(context)); // Most registers will start off as zero.
-  context.R0 = (uint32_t)arg;
-  context.PC = (uint32_t)t; // The program counter starts at the task entry point.
-  context.xPSR.b.T = 1; // Enable Thumb mode.
-  
-  task_t * task = heap_malloc(sizeof(*task));
-  assert(task != NULL);
-  
-  static uint8_t taskIdCounter = 0;
-  task->id = taskIdCounter++;
-  task->state = STATE_READY;
-  task->provisionedPriority = priority;
-  task->priority = priority;
-  task->stackPointer = (uint32_t)stack + stackSize;
-  task->stackPointer &= ~0x7; // The stack must be 8 byte aligned.
-  task->stackPointer -= sizeof(context_t);
-  memcpy((void*)task->stackPointer, &context, sizeof(context));
-  vector_init(&task->blocked);
-  
-  // Add the task to the queue of ready tasks.
-  pqueue_push(&readyQueue, task, task->priority);
-}
-
 void kernel_update_sleep(unsigned int ticks)
 {
   // Iterate through all the tasks to update the sleep time left.
@@ -265,7 +240,7 @@ void kernel_handle_syscall(uint8_t value)
   case SYSCALL_CHANNEL_RECV:
     kernel_handle_channel_recv();
     break;
-  case SYSCALL_CHANNEL_RPLY:
+  case SYSCALL_CHANNEL_REPLY:
     kernel_handle_channel_reply();
     break;
   default:
@@ -422,7 +397,6 @@ void kernel_handle_channel_recv(void)
     {
       task_reschedule(runningTask);
     }
-    assert(runningTask->priority > 10);
   }
   else
   {
@@ -461,5 +435,34 @@ void kernel_handle_channel_reply(void)
   if (reschedule)
   {
     task_reschedule(runningTask);
+  }
+}
+
+/*
+ * See section B2.5 of the ARM architecture reference manual.
+ * Updates to the SCS registers require the use of DSB/ISB instructions.
+ * The SysTick and SCB are part of the SCS (System control space).
+ */
+void kernel_scheduler_disable(void)
+{
+  // Disable the system tick ISR
+  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
+  __DSB();
+  __ISB();
+}
+
+void kernel_scheduler_enable(void)
+{
+  // Reenable the systick ISR.
+  SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+  __DSB();
+  __ISB();
+  if (SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
+  {
+    // Trigger the systick ISR if the timer expired
+    // while the ISR was disabled.
+    SCB->ICSR = SCB_ICSR_PENDSTSET_Msk;
+    __DSB();
+    __ISB();
   }
 }

@@ -24,7 +24,13 @@
 void kernel_scheduler_disable(void);
 void kernel_scheduler_enable(void);
 
+// The priority queue of all ready tasks
 extern pqueue_t readyQueue;
+
+// The task that's currently running.
 extern task_t * runningTask;
+
+// True once manticore_main() has been called.
+extern bool kernelRunning;
 
 #endif

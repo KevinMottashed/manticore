@@ -19,10 +19,17 @@
 
 void vector_init(vector_t * v)
 {
+  assert(v != NULL);
   v->size = 0;
   v->alloc = MIN_VECTOR_ALLOC;
   v->array = heap_malloc(MIN_VECTOR_ALLOC * sizeof(v->array[0]));
   assert(v->array != NULL);
+}
+
+void vector_destroy(vector_t * v)
+{
+  assert(v != NULL);
+  heap_free(v->array);
 }
 
 size_t vector_size(vector_t * v)
@@ -105,4 +112,3 @@ void vector_remove(vector_t * v, void * data)
   }
   return;
 }
-

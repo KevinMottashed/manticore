@@ -31,6 +31,8 @@ typedef enum task_state_e
   STATE_CHANNEL_SEND,
   STATE_CHANNEL_RECV,
   STATE_CHANNEL_RPLY,
+  STATE_ZOMBIE,
+  STATE_WAIT
 } task_state_t;
 
 // The is the context that will be saved and restored during context
@@ -77,8 +79,12 @@ typedef struct task_s
   // A task can only be in one state at a time so a union is used to save space.
   union
   {
+    // The time in systicks that we need to sleep for.
     unsigned int sleep;
+    
+    // The mutex we're waiting on.
     struct mutex_s * mutex;
+    
     struct channel_context_s
     {
       // The channel that we're block on
@@ -92,6 +98,10 @@ typedef struct task_s
       void * reply;
       size_t * replyLen;
     } channel;
+    
+    // The task we're waiting on and the result it returned.
+    struct task_s * wait;
+    void * waitResult;
   };
 } task_t;
 
@@ -107,5 +117,8 @@ bool task_update_blocked(task_t * task, task_t * blocked);
 // has changed. This should be called whenever task_add_blocked(),
 // task_remove_blocked() or task_update_blocked() returns true.
 void task_reschedule(task_t * task);
+
+// Destroy a task. Release all allocated resources.
+void task_destroy(task_t * task);
 
 #endif

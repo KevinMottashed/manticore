@@ -48,6 +48,7 @@ volatile uint32_t * savedStackPointer;
 
 task_t * runningTask;
 pqueue_t readyQueue;
+bool kernelRunning = false;
 
 static vector_t sleepVector;
 
@@ -62,6 +63,8 @@ static void kernel_handle_mutex_unlock(void);
 static void kernel_handle_channel_send(void);
 static void kernel_handle_channel_recv(void);
 static void kernel_handle_channel_reply(void);
+static void kernel_handle_task_return(void);
+static void kernel_handle_task_wait(void);
 
 void manticore_init(void)
 {
@@ -72,8 +75,7 @@ void manticore_init(void)
 
 void manticore_main(void)
 {
-  // Enable SysTick IRQ.
-  SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
+  kernelRunning = true;
   
   unsigned int kernelTicks = 0;
   unsigned int systickReload = 0xFFFFFF;
@@ -242,6 +244,12 @@ void kernel_handle_syscall(uint8_t value)
   case SYSCALL_CHANNEL_REPLY:
     kernel_handle_channel_reply();
     break;
+  case SYSCALL_TASK_RETURN:
+    kernel_handle_task_return();
+    break;
+  case SYSCALL_TASK_WAIT:
+    kernel_handle_task_wait();
+    break;    
   default:
     assert(false);
   }
@@ -424,6 +432,63 @@ void kernel_handle_channel_reply(void)
   if (reschedule)
   {
     task_reschedule(runningTask);
+  }
+}
+
+void kernel_handle_task_return(void)
+{
+  // When a task returns there should be exactly 0 or 1 tasks blocked on it.
+  // If there's a task blocked on this task then it should be in the wait state.
+  // It makes no sense for a task to return while holding a mutex or doing
+  // something else that would cause a another task to block on it.
+  // If no tasks are blocked on this task then it will go in the zombie state
+  // until some other task retrieves the return code.
+  assert(vector_size(&runningTask->blocked) == 0 ||
+         (vector_size(&runningTask->blocked) == 1 &&
+         ((task_t*)vector_at(&runningTask->blocked, 0))->state == STATE_WAIT));
+  
+  if (vector_size(&runningTask->blocked) == 1)
+  {
+    // Another task is already waiting for us. Give it the return code.
+    task_t * task = vector_at(&runningTask->blocked, 0);
+    task->waitResult = runningTask->waitResult;
+    
+    // The other task becomes ready and the returned task ceases to exist.
+    task->state = STATE_READY;
+    pqueue_push(&readyQueue, task, task->priority);
+    task_destroy(runningTask);
+  }
+  else
+  {
+    // No one is waiting for this task. Go into the zombie state until
+    // someone retrieves the return code.
+    runningTask->state = STATE_ZOMBIE;
+  }
+}
+
+void kernel_handle_task_wait(void)
+{
+  assert(runningTask->wait != NULL);
+  
+  task_t * task = runningTask->wait;
+  if (task->state == STATE_ZOMBIE)
+  {
+    // The other task has already returned. 
+    // Take the return value and destroy it.
+    runningTask->state = STATE_READY;
+    pqueue_push(&readyQueue, runningTask, runningTask->priority);
+    runningTask->waitResult = task->waitResult;
+    task_destroy(task);
+  }
+  else
+  {
+    // The other task hasn't returned yet. Wait for it.
+    bool reschedule = task_add_blocked(task, runningTask);
+    if (reschedule)
+    {
+      task_reschedule(task);
+    }
+    runningTask->state = STATE_WAIT;
   }
 }
 

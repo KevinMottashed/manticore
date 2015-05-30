@@ -59,6 +59,13 @@ task_handle_t task_create(task_entry_t entry,
                           void * stack, 
                           uint32_t stackSize, 
                           uint8_t priority);
+ 
+/**
+ * Wait for a task to return.
+ * @param The task to wait for.
+ * @return The value that the task returned.
+ */
+void * task_wait(task_handle_t task);
 
 /**
  * Get a tasks priority.
@@ -152,6 +159,7 @@ void channel_send(channel_handle_t channel,
  * @param channel The channel to receive a message from.
  * @param data The buffer where the message can be stored.
  * @param len The length of the receive buffer.
+ * @return The size of the received message.
  */
 size_t channel_recv(channel_handle_t channel, void * data, size_t len);
 

@@ -11,6 +11,8 @@
 #include "manticore.h"
 #include "clock.h"
 #include "gpio.h"
+#include "heap.h"
+#include "utils.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -31,6 +33,8 @@ static __task void * task_never(void * arg);
 static __task void * task_mutex_lock(void * arg);
 static __task void * task_mutex_lock2(void * arg);
 static __task void * task_led_server(void * arg);
+static __task void * task_parent(void * arg);
+static __task void * task_child(void * arg);
 
 // ARM requires 8 byte alignment for the stack.
 #pragma data_alignment = 8
@@ -196,6 +200,32 @@ __task void * task_led_server(void * arg)
   }
 }
 
+__task void * task_parent(void * arg)
+{
+  void * stack = heap_malloc(128);
+  while (true)
+  {
+    for (int i = 0; i < 100; ++i)
+    {
+      // Test creating a task and wait for it to finish.
+      task_handle_t child = task_create(&task_child, (void*)i, stack, 128, task_get_priority(NULL) - 1);
+      int result = (int)task_wait(child);
+      assert(result == i);
+    }
+  }
+}
+
+__task void * task_child(void * arg)
+{
+  assert(task_get_priority(NULL) == 10);
+  
+  // Do some useless work for a while.
+  for (uint32_t i = 0; i < 0x100000; ++i)
+  {
+  }
+  return arg;
+}
+
 int main()
 {
   // Initialize the hardware.
@@ -209,19 +239,23 @@ int main()
   mutex = mutex_create();
   ledChannel = channel_create();
   
+  // The parent task needs a bit more stack.
+  static uint8_t parentStack[192];
+  
   //
   // Create all the tasks.
   //
   
-  //           Entry                Argument   Stack      Stack Size  Priority
-  task_create(&Task_Busy_Yield,     NULL,      stacks[0], STACK_SIZE, 10);
-  task_create(&task_mutex_try_lock, NULL,      stacks[1], STACK_SIZE, 10);
-  task_create(&task_led3,           (void*)33, stacks[2], STACK_SIZE, 15);
-  task_create(&task_led4,           (void*)56, stacks[3], STACK_SIZE, 20);
-  task_create(&task_never,          NULL,      stacks[4], STACK_SIZE, 5);
-  task_create(&task_mutex_lock,     NULL,      stacks[5], STACK_SIZE, 12);
-  task_create(&task_mutex_lock2,    NULL,      stacks[6], STACK_SIZE, 10);
-  task_create(&task_led_server,     NULL,      stacks[7], STACK_SIZE, 10);
+  //           Entry                Argument   Stack        Stack Size  Priority
+  task_create(&Task_Busy_Yield,     NULL,      stacks[0],   STACK_SIZE, 10);
+  task_create(&task_mutex_try_lock, NULL,      stacks[1],   STACK_SIZE, 10);
+  task_create(&task_led3,           (void*)33, stacks[2],   STACK_SIZE, 15);
+  task_create(&task_led4,           (void*)56, stacks[3],   STACK_SIZE, 20);
+  task_create(&task_never,          NULL,      stacks[4],   STACK_SIZE, 5);
+  task_create(&task_mutex_lock,     NULL,      stacks[5],   STACK_SIZE, 12);
+  task_create(&task_mutex_lock2,    NULL,      stacks[6],   STACK_SIZE, 10);
+  task_create(&task_led_server,     NULL,      stacks[7],   STACK_SIZE, 10);
+  task_create(&task_parent,         NULL,      parentStack, 192,        10);
   
   // Start the kernel.
   manticore_main();

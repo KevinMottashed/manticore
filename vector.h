@@ -25,8 +25,9 @@ typedef struct vector_s
   size_t alloc;  // The number of elements allocated.
 } vector_t;
 
-// Initialization
+// Initialization / Destruction
 void vector_init(vector_t * v);
+void vector_destroy(vector_t * v);
 
 // Capacity
 size_t vector_size(vector_t * v);

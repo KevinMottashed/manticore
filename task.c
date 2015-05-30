@@ -9,14 +9,23 @@
 #include <assert.h>
 #include <string.h>
 
+static void task_return(void * result);
+
 task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
 {
   assert(stack != NULL);
   assert(stackSize >= sizeof(context_t));
   
+  if (kernelRunning)
+  {
+    // We can't be preempted while creating a new task.
+    kernel_scheduler_disable();
+  }
+  
   context_t context;
   memset(&context, 0, sizeof(context)); // Most registers will start off as zero.
   context.R0 = (uint32_t)arg;
+  context.LR = (uint32_t)&task_return;
   context.PC = (uint32_t)entry; // The program counter starts at the task entry point.
   context.xPSR.b.T = 1; // Enable Thumb mode.
   
@@ -36,7 +45,20 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   
   // Add the task to the queue of ready tasks.
   pqueue_push(&readyQueue, task, task->priority);
+  
+  if (kernelRunning)
+  {
+    kernel_scheduler_enable();
+  }
+  
   return task;
+}
+
+void * task_wait(task_handle_t task)
+{
+  runningTask->wait = task;
+  SVC_TASK_WAIT();
+  return runningTask->waitResult;
 }
   
 uint8_t task_get_priority(task_handle_t task)
@@ -178,4 +200,19 @@ void task_reschedule(task_t * task)
   }
 
   return;
+}
+
+void task_destroy(task_t * task)
+{
+  assert(task != NULL);
+  vector_destroy(&task->blocked);
+  heap_free(task);
+}
+
+void task_return(void * result)
+{
+  runningTask->waitResult = result;
+  SVC_TASK_RETURN();
+  // will never get here
+  assert(false);
 }

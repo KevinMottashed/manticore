@@ -9,6 +9,8 @@
 #include <assert.h>
 #include <string.h>
 
+#define TASK_STACK_MAGIC (0x45e2c902)
+
 static void task_return(void * result);
 
 task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
@@ -33,6 +35,8 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   task->stackPointer = (uint32_t)stack + stackSize;
   task->stackPointer &= ~0x7; // The stack must be 8 byte aligned.
   task->stackPointer -= sizeof(context_t);
+  task->stack = stack;
+  *(uint32_t*)task->stack = TASK_STACK_MAGIC;
   vector_init(&task->blocked);
   
   context_t * context = (context_t*)task->stackPointer;
@@ -214,4 +218,10 @@ void task_return(void * result)
   SVC_TASK_RETURN();
   // will never get here
   assert(false);
+}
+
+bool task_check(task_t * task)
+{
+  // Make sure the stack didn't overflow.
+  return *(uint32_t*)task->stack == TASK_STACK_MAGIC;
 }

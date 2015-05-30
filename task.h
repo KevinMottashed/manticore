@@ -65,6 +65,7 @@ typedef struct task_s
 {
   uint32_t id;
   uint32_t stackPointer;
+  void * stack;
   task_state_t state;
   
   // The provisioned and real priorities. The real priority is updated
@@ -120,5 +121,8 @@ void task_reschedule(task_t * task);
 
 // Destroy a task. Release all allocated resources.
 void task_destroy(task_t * task);
+
+// Perform a sanity check on the task.
+bool task_check(task_t * task);
 
 #endif

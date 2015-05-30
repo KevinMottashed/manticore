@@ -46,7 +46,7 @@
 volatile uint8_t syscallValue;
 volatile uint32_t * savedStackPointer;
 
-task_t * runningTask;
+task_t * runningTask = NULL;
 pqueue_t readyQueue;
 bool kernelRunning = false;
 
@@ -84,6 +84,11 @@ void manticore_main(void)
   {
     // The systick value when entering the kernel.
     int kernelStartTicks = SysTick->VAL;
+    
+    if (runningTask != NULL)
+    {
+      assert(task_check(runningTask));
+    }
     
     // Update how much time is left for each sleeping task to wake up.
     kernel_update_sleep(systickReload - kernelStartTicks + kernelTicks);

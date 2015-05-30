@@ -54,7 +54,7 @@ SaveSVC:
   SUBS R0, R0, #2 ; Move back to the SVC instruction.
   LDRB R0, [R0] ; Read the LSB of the instruction which will be the SVC value.
   LDR R1, =syscallValue
-  STR R0, [R1]
+  STRB R0, [R1]
   BX LR
   
 SVCall_Handler:

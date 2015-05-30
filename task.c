@@ -22,13 +22,6 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
     kernel_scheduler_disable();
   }
   
-  context_t context;
-  memset(&context, 0, sizeof(context)); // Most registers will start off as zero.
-  context.R0 = (uint32_t)arg;
-  context.LR = (uint32_t)&task_return;
-  context.PC = (uint32_t)entry; // The program counter starts at the task entry point.
-  context.xPSR.b.T = 1; // Enable Thumb mode.
-  
   task_t * task = heap_malloc(sizeof(*task));
   assert(task != NULL);
   
@@ -40,8 +33,14 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   task->stackPointer = (uint32_t)stack + stackSize;
   task->stackPointer &= ~0x7; // The stack must be 8 byte aligned.
   task->stackPointer -= sizeof(context_t);
-  memcpy((void*)task->stackPointer, &context, sizeof(context));
   vector_init(&task->blocked);
+  
+  context_t * context = (context_t*)task->stackPointer;
+  memset(context, 0, sizeof(*context)); // Most registers will start off as zero.
+  context->R0 = (uint32_t)arg;
+  context->LR = (uint32_t)&task_return;
+  context->PC = (uint32_t)entry; // The program counter starts at the task entry point.
+  context->xPSR.b.T = 1; // Enable Thumb mode.
   
   // Add the task to the queue of ready tasks.
   pqueue_push(&readyQueue, task, task->priority);

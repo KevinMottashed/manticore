@@ -19,7 +19,7 @@
 #include <assert.h>
 
 // 128 bytes of stack should be enough for these dummy tasks.
-#define NUM_TASKS (8)
+#define NUM_TASKS (9)
 #define STACK_SIZE (128)
 
 // This collection of tasks are used to test the system.
@@ -239,23 +239,20 @@ int main()
   mutex = mutex_create();
   ledChannel = channel_create();
   
-  // The parent task needs a bit more stack.
-  static uint8_t parentStack[192];
-  
   //
   // Create all the tasks.
   //
   
-  //           Entry                Argument   Stack        Stack Size  Priority
-  task_create(&Task_Busy_Yield,     NULL,      stacks[0],   STACK_SIZE, 10);
-  task_create(&task_mutex_try_lock, NULL,      stacks[1],   STACK_SIZE, 10);
-  task_create(&task_led3,           (void*)33, stacks[2],   STACK_SIZE, 15);
-  task_create(&task_led4,           (void*)56, stacks[3],   STACK_SIZE, 20);
-  task_create(&task_never,          NULL,      stacks[4],   STACK_SIZE, 5);
-  task_create(&task_mutex_lock,     NULL,      stacks[5],   STACK_SIZE, 12);
-  task_create(&task_mutex_lock2,    NULL,      stacks[6],   STACK_SIZE, 10);
-  task_create(&task_led_server,     NULL,      stacks[7],   STACK_SIZE, 10);
-  task_create(&task_parent,         NULL,      parentStack, 192,        10);
+  //           Entry                Argument   Stack      Stack Size  Priority
+  task_create(&Task_Busy_Yield,     NULL,      stacks[0], STACK_SIZE, 10);
+  task_create(&task_mutex_try_lock, NULL,      stacks[1], STACK_SIZE, 10);
+  task_create(&task_led3,           (void*)33, stacks[2], STACK_SIZE, 15);
+  task_create(&task_led4,           (void*)56, stacks[3], STACK_SIZE, 20);
+  task_create(&task_never,          NULL,      stacks[4], STACK_SIZE, 5);
+  task_create(&task_mutex_lock,     NULL,      stacks[5], STACK_SIZE, 12);
+  task_create(&task_mutex_lock2,    NULL,      stacks[6], STACK_SIZE, 10);
+  task_create(&task_led_server,     NULL,      stacks[7], STACK_SIZE, 10);
+  task_create(&task_parent,         NULL,      stacks[8], STACK_SIZE, 10);
   
   // Start the kernel.
   manticore_main();

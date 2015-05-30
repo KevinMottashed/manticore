@@ -26,7 +26,7 @@ SysTickCtrlAddr
   THUMB
 
 ClearSysTick:
-  ; This functions read the systick control register
+  ; This function reads the systick control register
   ; to clear the COUNTFLAG field.
   ; R0 = SysTick->CTRL address
   ; R1 = SysTick->CTRL value

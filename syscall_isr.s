@@ -15,9 +15,33 @@
   IMPORT SaveContext
   IMPORT RestoreKernel
   IMPORT syscallValue
+  IMPORT SysTickCtrlAddr
+  
+  SECTION .data : CONST (2)
+PendStClear
+  DC32 0x02000000
+  
+ICSR ; Interrupt control and status register
+  DC32 0xE000ED04
   
   SECTION .text : CODE (2)
   THUMB
+  
+DisableSysTickIrq:
+  ; Disable the systick ISR
+  LDR R0, =SysTickCtrlAddr
+  LDR R0, [R0]
+  MOVS R1, #1
+  STR R1, [R0]
+  
+  ; Clear a pending systick interrupt
+  LDR R0, =ICSR
+  LDR R0, [R0]
+  LDR R1, =PendStClear
+  LDR R1, [R1]
+  STR R1, [R0]
+  
+  BX LR
   
 ; Saves the value associated with the SVC instruction.
 ; void SaveSVC(void)
@@ -36,6 +60,7 @@ SaveSVC:
 SVCall_Handler:
   ; We need to save the task context, save the SVC value and then
   ; let the kernel handle the system call.
+  BL DisableSysTickIrq
   BL SaveContext
   BL SaveSVC
   B RestoreKernel

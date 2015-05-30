@@ -352,7 +352,6 @@ void kernel_handle_channel_send(void)
     {
       task_reschedule(recv);
     }
-    assert(recv->priority > 10);
   }
   else
   {

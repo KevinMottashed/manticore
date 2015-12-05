@@ -21,6 +21,7 @@
 #include "heap.h"
 #include "pqueue.h"
 #include "vector.h"
+#include "list.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -50,7 +51,7 @@ task_t * runningTask = NULL;
 pqueue_t readyQueue;
 bool kernelRunning = false;
 
-static vector_t sleepVector;
+static struct list_head sleeping_tasks;
 
 static void kernel_update_sleep(unsigned int ticks);
 
@@ -75,7 +76,7 @@ void manticore_init(void)
 {
   // Initialize the ready queue and the vector of sleeping tasks.
   pqueue_init(&readyQueue);
-  vector_init(&sleepVector);
+  list_init(&sleeping_tasks);
 
   task_create(kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
 }
@@ -125,9 +126,11 @@ void manticore_main(void)
       {
         sleep = TIME_SLICE_TICKS;
       }
-      for (int i = 0; i < vector_size(&sleepVector); ++i)
+
+      struct list_head * node;
+      list_for_each(node, &sleeping_tasks)
       {
-        task_t * t = vector_at(&sleepVector, i);
+        task_t * t = container_of(node, struct task_s, wait_node);
         if (t->priority > nextTask->priority)
         {
           // A higher priority sleeping task can reduce the sleep time
@@ -147,9 +150,10 @@ void manticore_main(void)
     {
       // We have no ready tasks.
       // Sleep until the next sleeping task needs wakes up.
-      for (int i = 0; i < vector_size(&sleepVector); ++i)
+      struct list_head * node;
+      list_for_each(node, &sleeping_tasks)
       {
-        task_t * t = vector_at(&sleepVector, i);
+        task_t * t = container_of(node, struct task_s, wait_node);
         sleep = MIN(sleep, t->sleep);
       }
     }
@@ -195,21 +199,21 @@ void manticore_main(void)
 void kernel_update_sleep(unsigned int ticks)
 {
   // Iterate through all the tasks to update the sleep time left.
-  for (int i = 0; i < vector_size(&sleepVector);)
+  struct list_head * node;
+  list_for_each_safe(node, &sleeping_tasks)
   {
-    task_t * t = vector_at(&sleepVector, i);
+    struct task_s * t = container_of(node, struct task_s, wait_node);
     if (ticks >= t->sleep)
     {
       // The task is ready. Remove it from the sleep vector.
       t->sleep = 0;
       t->state = STATE_READY;
+      list_remove(&t->wait_node);
       pqueue_push(&readyQueue, t, t->priority);
-      vector_erase(&sleepVector, i);
     }
     else
     {
       t->sleep -= ticks;
-      ++i;
     }
   }
 }
@@ -269,7 +273,7 @@ void kernel_handle_sleep(void)
 {
   runningTask->state = STATE_SLEEP;
   runningTask->sleep *= SYSTICK_RELOAD_MS;
-  vector_push_back(&sleepVector, runningTask);
+  list_push_back(&sleeping_tasks, &runningTask->wait_node);
 }
 
 void kernel_handle_mutex_lock(void)
@@ -439,18 +443,20 @@ void kernel_handle_task_return(void)
   // something else that would cause a another task to block on it.
   // If no tasks are blocked on this task then it will go in the zombie state
   // until some other task retrieves the return code.
-  assert(vector_size(&runningTask->blocked) == 0 ||
-         (vector_size(&runningTask->blocked) == 1 &&
-         ((task_t*)vector_at(&runningTask->blocked, 0))->state == STATE_WAIT));
+  assert(runningTask->blocking_len == 0 ||
+         runningTask->blocking_len == 1 &&
+         container_of(runningTask->blocking_head.next, struct task_s, blocked_node)->state == STATE_WAIT);
 
-  if (vector_size(&runningTask->blocked) == 1)
+  if (runningTask->blocking_len == 1)
   {
     // Another task is already waiting for us. Give it the return code.
-    task_t * task = vector_at(&runningTask->blocked, 0);
+    task_t * task = container_of(runningTask->blocking_head.next, struct task_s, blocked_node);
     task->waitResult = runningTask->waitResult;
 
     // The other task becomes ready and the returned task ceases to exist.
     task->state = STATE_READY;
+    --runningTask->blocking_len;
+    list_remove(&task->blocked_node);
     pqueue_push(&readyQueue, task, task->priority);
     task_destroy(runningTask);
   }

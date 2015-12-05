@@ -2127,6 +2127,9 @@
     <name>$PROJ_DIR$\kernel.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\list.c</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\main.c</name>
   </file>
   <file>

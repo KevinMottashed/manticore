@@ -3,7 +3,7 @@
  * "THE BEER-WARE LICENSE" (Revision 42):
  * <kevinmottashed@gmail.com> wrote this file. As long as you retain this notice you
  * can do whatever you want with this stuff. If we meet some day, and you think
- * this stuff is worth it, you can buy me a beer in return. 
+ * this stuff is worth it, you can buy me a beer in return.
  * -Kevin Mottashed
  * ----------------------------------------------------------------------------
  */
@@ -81,7 +81,7 @@ __task void * task_led3(void * arg)
   unsigned int x = (unsigned int)arg;
   led_cmd_t cmd;
   cmd.led = 3;
-  led_cmd_reply_t reply; 
+  led_cmd_reply_t reply;
   bool on = true;
   while (true)
   {
@@ -101,7 +101,7 @@ __task void * task_led4(void * arg)
   unsigned int x = (unsigned int)arg;
   led_cmd_t cmd;
   cmd.led = 4;
-  led_cmd_reply_t reply; 
+  led_cmd_reply_t reply;
   bool on = true;
   while (true)
   {
@@ -141,12 +141,12 @@ __task void * task_mutex_lock2(void * arg)
   {
     mutex_lock(mutex);
     task_delay(200);
-    
+
     // task_mutex_lock() should be blocked on us
     assert(task_get_priority(NULL) == 12);
-    
+
     mutex_unlock(mutex);
-    
+
     // We should be back to our original priority.
     assert(task_get_priority(NULL) == 10);
     task_delay(200);
@@ -160,10 +160,10 @@ __task void * task_led_server(void * arg)
   {
     led_cmd_t cmd;
     led_cmd_reply_t reply;
-    
+
     size_t len = channel_recv(ledChannel, &cmd, sizeof(cmd));
     assert(len == sizeof(cmd));
-    
+
     if (cmd.led == 3 && cmd.state == true)
     {
       // We should have inherited the priority of the sender.
@@ -194,7 +194,7 @@ __task void * task_led_server(void * arg)
       reply.ok = false;
     }
     channel_reply(ledChannel, &reply, sizeof(reply));
-    
+
     // We should be back to our original priority.
     assert(task_get_priority(NULL) == 10);
   }
@@ -218,7 +218,7 @@ __task void * task_parent(void * arg)
 __task void * task_child(void * arg)
 {
   assert(task_get_priority(NULL) == 10);
-  
+
   // Do some useless work for a while.
   for (uint32_t i = 0; i < 0x100000; ++i)
   {
@@ -234,15 +234,15 @@ int main()
 
   // Initialize the kernel
   manticore_init();
-  
+
   // Create some synchronization mechanisms.
   mutex = mutex_create();
   ledChannel = channel_create();
-  
+
   //
   // Create all the tasks.
   //
-  
+
   //           Entry                Argument   Stack      Stack Size  Priority
   task_create(&Task_Busy_Yield,     NULL,      stacks[0], STACK_SIZE, 10);
   task_create(&task_mutex_try_lock, NULL,      stacks[1], STACK_SIZE, 10);
@@ -253,7 +253,7 @@ int main()
   task_create(&task_mutex_lock2,    NULL,      stacks[6], STACK_SIZE, 10);
   task_create(&task_led_server,     NULL,      stacks[7], STACK_SIZE, 10);
   task_create(&task_parent,         NULL,      stacks[8], STACK_SIZE, 10);
-  
+
   // Start the kernel.
   manticore_main();
 }

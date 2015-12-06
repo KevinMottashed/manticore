@@ -49,7 +49,7 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   context->xPSR.b.T = 1; // Enable Thumb mode.
 
   // Add the task to the queue of ready tasks.
-  pqueue_push(&readyQueue, task, task->priority);
+  list_push_back(&ready_tasks, &task->wait_node);
 
   if (kernelRunning)
   {
@@ -150,9 +150,9 @@ bool task_update_blocked(task_t * task, task_t * blocked)
     task->priority = blocked->priority;
     return true;
   }
-  else
+  // Check if our priority needs to be decreased.
+  else if (blocked->priority < task->priority)
   {
-    // Check if our priority needs to be decreased.
     uint8_t newPriority = task->provisionedPriority;
     struct list_head * node;
     list_for_each(node, &task->blocking_head)
@@ -175,28 +175,15 @@ void task_reschedule(task_t * task)
   assert(task != NULL);
   assert(task->state != STATE_RUNNING);
 
-  if (task->state == STATE_READY)
+  if (task->state == STATE_MUTEX)
   {
-    // Reposition the task in the ready queue.
-    pqueue_reschedule(&readyQueue, task, task->priority);
-  }
-  else if (task->state == STATE_MUTEX)
-  {
-    // We need to reschedule our position in the mutex queue.
-    pqueue_reschedule(&task->mutex->queue, task, task->priority);
-
-    // We also might need to reschedule the task that we're blocked on if
+    // We might need to reschedule the task that we're blocked on if
     // its priority changes as a result of our priority changing.
     bool reschedule = task_update_blocked(task->mutex->owner, task);
     if (reschedule)
     {
       task_reschedule(task->mutex->owner);
     }
-  }
-  else if (task->state == STATE_CHANNEL_SEND)
-  {
-    // We need to reschedule our position in the channels queue.
-    pqueue_reschedule(&task->channel.c->sendQueue, task, task->priority);
   }
   else if (task->state == STATE_CHANNEL_RPLY)
   {
@@ -205,6 +192,14 @@ void task_reschedule(task_t * task)
     if (reschedule)
     {
       task_reschedule(task->channel.c->server);
+    }
+  }
+  else if (task->state == STATE_WAIT)
+  {
+    bool reschedule = task_update_blocked(task->wait, task);
+    if (reschedule)
+    {
+      task_reschedule(task->wait);
     }
   }
 

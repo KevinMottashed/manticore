@@ -3,14 +3,14 @@
  * "THE BEER-WARE LICENSE" (Revision 42):
  * <kevinmottashed@gmail.com> wrote this file. As long as you retain this notice you
  * can do whatever you want with this stuff. If we meet some day, and you think
- * this stuff is worth it, you can buy me a beer in return. 
+ * this stuff is worth it, you can buy me a beer in return.
  * -Kevin Mottashed
  * ----------------------------------------------------------------------------
  */
 
 
 #include "mutex.h"
-   
+
 #include "manticore.h"
 
 #include "system.h"
@@ -18,20 +18,21 @@
 #include "utils.h"
 #include "kernel.h"
 #include "heap.h"
-   
+
 #include <assert.h>
 
 mutex_handle_t mutex_create(void)
 {
   static uint8_t mutexIdCounter = 0;
-  
+
   mutex_t * mutex = heap_malloc(sizeof(*mutex));
   assert(mutex != NULL);
-  
+
   mutex->id = mutexIdCounter++;
   mutex->owner = NULL;
   mutex->locked = false;
-  pqueue_init(&mutex->queue);
+  mutex->num_waiting_tasks = 0;
+  list_init(&mutex->waiting_tasks);
   return mutex;
 }
 
@@ -74,7 +75,7 @@ bool mutex_trylock(mutex_t * mutex)
 void mutex_unlock(mutex_t * mutex)
 {
   kernel_scheduler_disable();
-  if (!pqueue_empty(&mutex->queue))
+  if (mutex->num_waiting_tasks > 0)
   {
     // Another task is waiting for this mutex.
     // Let the kernel run to unblock it.

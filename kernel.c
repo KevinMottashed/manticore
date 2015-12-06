@@ -19,8 +19,6 @@
 #include "clock.h"
 #include "mutex.h"
 #include "heap.h"
-#include "pqueue.h"
-#include "vector.h"
 #include "list.h"
 
 #include <stdint.h>
@@ -48,12 +46,13 @@ volatile uint8_t syscallValue;
 volatile uint32_t * savedStackPointer;
 
 task_t * runningTask = NULL;
-pqueue_t readyQueue;
 bool kernelRunning = false;
 
+struct list_head ready_tasks;
 static struct list_head sleeping_tasks;
 
 static void kernel_update_sleep(unsigned int ticks);
+static struct task_s * get_next_task(struct list_head * list);
 
 // Handle the various system calls
 static void kernel_handle_syscall(uint8_t value);
@@ -75,10 +74,12 @@ static __task void * kernel_task_idle(void * arg);
 void manticore_init(void)
 {
   // Initialize the ready queue and the vector of sleeping tasks.
-  pqueue_init(&readyQueue);
+  list_init(&ready_tasks);
   list_init(&sleeping_tasks);
 
-  task_create(kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
+  // Create the idle task and set it as the initial running task.
+  struct task_s * idle = task_create(kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
+  runningTask = idle;
 }
 
 void manticore_main(void)
@@ -93,10 +94,7 @@ void manticore_main(void)
     // The systick value when entering the kernel.
     int kernelStartTicks = SysTick->VAL;
 
-    if (runningTask != NULL)
-    {
-      assert(task_check(runningTask));
-    }
+    assert(task_check(runningTask));
 
     // Update how much time is left for each sleeping task to wake up.
     kernel_update_sleep(systickReload - kernelStartTicks + kernelTicks);
@@ -109,8 +107,9 @@ void manticore_main(void)
     // priority ready task will always run next and will never yield to
     // a lower priority task. The next task to run is the one at
     // the front of the priority queue.
-    task_t * nextTask = pqueue_pop(&readyQueue);
+    struct task_s * nextTask = get_next_task(&ready_tasks);
     assert(nextTask != NULL);
+    list_remove(&nextTask->wait_node);
 
     // We now know the next task that will run. We need to find out if
     // there's a sleeping task that needs to wakeup before the time slice expires.
@@ -121,7 +120,7 @@ void manticore_main(void)
       // if the next task has the same priority as the task we're about
       // to run. This ensures the CPU is shared between all the
       // highest priority tasks.
-      task_t * temp = pqueue_top(&readyQueue);
+      task_t * temp = get_next_task(&ready_tasks);
       if (temp != NULL && temp->priority == nextTask->priority)
       {
         sleep = TIME_SLICE_TICKS;
@@ -209,7 +208,7 @@ void kernel_update_sleep(unsigned int ticks)
       t->sleep = 0;
       t->state = STATE_READY;
       list_remove(&t->wait_node);
-      pqueue_push(&readyQueue, t, t->priority);
+      list_push_back(&ready_tasks, &t->wait_node);
     }
     else
     {
@@ -218,11 +217,28 @@ void kernel_update_sleep(unsigned int ticks)
   }
 }
 
+static struct task_s * get_next_task(struct list_head * list)
+{
+  struct task_s * next_task = NULL;
+  struct list_head * node;
+  list_for_each(node, list)
+  {
+    struct task_s * task = container_of(node, struct task_s, wait_node);
+    if (next_task == NULL ||
+        task->priority > next_task->priority)
+    {
+      next_task = task;
+    }
+  }
+  return next_task;
+}
+
 void kernel_handle_syscall(uint8_t value)
 {
   switch (value)
   {
   case SYSCALL_NONE:
+    break;
   case SYSCALL_YIELD:
     kernel_handle_yield();
     break;
@@ -262,11 +278,8 @@ void kernel_handle_yield(void)
   // 2. A task yielded the remainder of its time slice.
   // 3. The systick expired but no tasks were running.
   // Either way, the active task is no longer running.
-  if (runningTask != NULL)
-  {
-    runningTask->state = STATE_READY;
-    pqueue_push(&readyQueue, runningTask, runningTask->priority);
-  }
+  runningTask->state = STATE_READY;
+  list_push_back(&ready_tasks, &runningTask->wait_node);
 }
 
 void kernel_handle_sleep(void)
@@ -283,7 +296,9 @@ void kernel_handle_mutex_lock(void)
 
   // Add the active task to the queue of tasks waiting for the mutex.
   runningTask->state = STATE_MUTEX;
-  pqueue_push(&mutex->queue, runningTask, runningTask->priority);
+  list_remove(&runningTask->wait_node);
+  list_push_back(&mutex->waiting_tasks, &runningTask->wait_node);
+  ++mutex->num_waiting_tasks;
 
   // The owner of the mutex is now blocking whoever tried to lock it.
   bool reschedule = task_add_blocked(mutex->owner, runningTask);
@@ -299,14 +314,16 @@ void kernel_handle_mutex_unlock(void)
   assert(mutex != NULL);
 
   // Unblock the next highest priority task waiting for this mutex.
-  task_t * newOwner = pqueue_pop(&mutex->queue);
+  task_t * newOwner = get_next_task(&mutex->waiting_tasks);
   assert(newOwner != NULL);
+  list_remove(&newOwner->wait_node);
+  --mutex->num_waiting_tasks;
   newOwner->state = STATE_READY;
-  pqueue_push(&readyQueue, newOwner, newOwner->priority);
+  list_push_back(&ready_tasks, &newOwner->wait_node);
 
   // A task is still ready after unlocking a mutex.
   runningTask->state = STATE_READY;
-  pqueue_push(&readyQueue, runningTask, runningTask->priority);
+  list_push_back(&ready_tasks, &runningTask->wait_node);
 
   // The previous owner of the mutex is no longer blocking tasks waiting
   // for the mutex. The new owner of the mutex is now blocking all those tasks.
@@ -315,9 +332,11 @@ void kernel_handle_mutex_unlock(void)
   task_t * oldOwner = mutex->owner;
   mutex->owner = newOwner;
   rescheduleOldOwner = task_remove_blocked(oldOwner, newOwner);
-  for (int i = 0; i < pqueue_size(&mutex->queue); ++i)
+
+  struct list_head * node;
+  list_for_each(node, &mutex->waiting_tasks)
   {
-    task_t * waiter = pqueue_at(&mutex->queue, i);
+    struct task_s * waiter = container_of(node, struct task_s, wait_node);
     rescheduleOldOwner |= task_remove_blocked(oldOwner, waiter);
     rescheduleNewOwner |= task_add_blocked(newOwner, waiter);
   }
@@ -341,7 +360,7 @@ void kernel_handle_channel_send(void)
   {
     // There's a task waiting for a message.
     recv->state = STATE_READY;
-    pqueue_push(&readyQueue, recv, recv->priority);
+    list_push_back(&ready_tasks, &recv->wait_node);
     channel->receive = NULL;
     channel->server = recv;
 
@@ -365,18 +384,21 @@ void kernel_handle_channel_send(void)
   {
     // No task is waiting for a message.
     runningTask->state = STATE_CHANNEL_SEND;
-    pqueue_push(&runningTask->channel.c->sendQueue, runningTask, runningTask->priority);
+    list_push_back(&channel->waiting_tasks, &runningTask->wait_node);
   }
 }
 
 void kernel_handle_channel_recv(void)
 {
-  task_t * send = pqueue_pop(&runningTask->channel.c->sendQueue);
+  struct task_s * send = get_next_task(&runningTask->channel.c->waiting_tasks);
   if (send != NULL)
   {
     // A task has already sent a message to this channel.
     runningTask->state = STATE_READY;
-    pqueue_push(&readyQueue, runningTask, runningTask->priority);
+    list_push_back(&ready_tasks, &runningTask->wait_node);
+
+    // The task that sent us a message is no longer waiting to send us a message.
+    list_remove(&send->wait_node);
 
     // The task that sent the message becomes reply blocked.
     runningTask->channel.c->reply = send;
@@ -421,11 +443,11 @@ void kernel_handle_channel_reply(void)
 
   // The task we replied to becomes unblocked.
   replyTask->state = STATE_READY;
-  pqueue_push(&readyQueue, replyTask, replyTask->priority);
+  list_push_back(&ready_tasks, &replyTask->wait_node);
 
   // The task that replied is still ready.
   runningTask->state = STATE_READY;
-  pqueue_push(&readyQueue, runningTask, runningTask->priority);
+  list_push_back(&ready_tasks, &runningTask->wait_node);
 
   // The task that replied is now longer blocking the sender.
   bool reschedule = task_remove_blocked(runningTask, replyTask);
@@ -453,11 +475,16 @@ void kernel_handle_task_return(void)
     task_t * task = container_of(runningTask->blocking_head.next, struct task_s, blocked_node);
     task->waitResult = runningTask->waitResult;
 
+    // We're no longer blocking the task that was waiting for us.
+    bool reschedule = task_remove_blocked(runningTask, task);
+    if (reschedule)
+    {
+      task_reschedule(runningTask);
+    }
+
     // The other task becomes ready and the returned task ceases to exist.
     task->state = STATE_READY;
-    --runningTask->blocking_len;
-    list_remove(&task->blocked_node);
-    pqueue_push(&readyQueue, task, task->priority);
+    list_push_back(&ready_tasks, &task->wait_node);
     task_destroy(runningTask);
   }
   else
@@ -478,7 +505,7 @@ void kernel_handle_task_wait(void)
     // The other task has already returned.
     // Take the return value and destroy it.
     runningTask->state = STATE_READY;
-    pqueue_push(&readyQueue, runningTask, runningTask->priority);
+    list_push_back(&ready_tasks, &runningTask->wait_node);
     runningTask->waitResult = task->waitResult;
     task_destroy(task);
   }

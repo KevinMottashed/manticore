@@ -3,7 +3,7 @@
  * "THE BEER-WARE LICENSE" (Revision 42):
  * <kevinmottashed@gmail.com> wrote this file. As long as you retain this notice you
  * can do whatever you want with this stuff. If we meet some day, and you think
- * this stuff is worth it, you can buy me a beer in return. 
+ * this stuff is worth it, you can buy me a beer in return.
  * -Kevin Mottashed
  * ----------------------------------------------------------------------------
  */
@@ -22,10 +22,11 @@
 channel_handle_t channel_create(void)
 {
   static int channelId = 0;
-  
+
   channel_t * channel = heap_malloc(sizeof(*channel));
   channel->id = channelId++;
-  pqueue_init(&channel->sendQueue);
+  channel->num_waiting_tasks = 0;
+  list_init(&channel->waiting_tasks);
   channel->receive = NULL;
   channel->reply = NULL;
   channel->server = NULL;

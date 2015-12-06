@@ -14,11 +14,11 @@
 #include "system.h"
 #include "mutex.h"
 #include "channel.h"
-#include "vector.h"
 #include "syscall.h"
 #include "list.h"
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define MIN_PRIORITY (0)
 #define MAX_PRIORITY (255)

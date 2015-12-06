@@ -1916,9 +1916,6 @@
     <name>$PROJ_DIR$\mutex.c</name>
   </file>
   <file>
-    <name>$PROJ_DIR$\pqueue.c</name>
-  </file>
-  <file>
     <name>$PROJ_DIR$\syscall_isr.s</name>
   </file>
   <file>
@@ -1929,9 +1926,6 @@
   </file>
   <file>
     <name>$PROJ_DIR$\task_busy_yield.s</name>
-  </file>
-  <file>
-    <name>$PROJ_DIR$\vector.c</name>
   </file>
   <file>
     <name>$PROJ_DIR$\vector_table.s</name>

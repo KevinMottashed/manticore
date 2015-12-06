@@ -25,7 +25,6 @@ typedef struct mutex_s
   struct task_s * owner; // The task that owns this mutex.
 
   // The list of tasks waiting for this mutex.
-  uint32_t num_waiting_tasks;
   struct list_head waiting_tasks;
 } mutex_t;
 

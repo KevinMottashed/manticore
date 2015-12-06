@@ -31,7 +31,6 @@ mutex_handle_t mutex_create(void)
   mutex->id = mutexIdCounter++;
   mutex->owner = NULL;
   mutex->locked = false;
-  mutex->num_waiting_tasks = 0;
   list_init(&mutex->waiting_tasks);
   return mutex;
 }
@@ -75,7 +74,7 @@ bool mutex_trylock(mutex_t * mutex)
 void mutex_unlock(mutex_t * mutex)
 {
   kernel_scheduler_disable();
-  if (mutex->num_waiting_tasks > 0)
+  if (!list_empty(&mutex->waiting_tasks))
   {
     // Another task is waiting for this mutex.
     // Let the kernel run to unblock it.

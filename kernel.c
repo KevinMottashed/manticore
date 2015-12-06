@@ -306,7 +306,6 @@ void kernel_handle_mutex_lock(void)
   runningTask->state = STATE_MUTEX;
   list_remove(&runningTask->wait_node);
   list_push_back(&mutex->waiting_tasks, &runningTask->wait_node);
-  ++mutex->num_waiting_tasks;
 
   // The owner of the mutex is now blocking whoever tried to lock it.
   bool reschedule = task_add_blocked(mutex->owner, runningTask);
@@ -325,7 +324,6 @@ void kernel_handle_mutex_unlock(void)
   task_t * newOwner = get_next_task(&mutex->waiting_tasks);
   assert(newOwner != NULL);
   list_remove(&newOwner->wait_node);
-  --mutex->num_waiting_tasks;
   newOwner->state = STATE_READY;
   list_push_back(&ready_tasks, &newOwner->wait_node);
 

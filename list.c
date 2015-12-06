@@ -64,9 +64,20 @@ void list_append(struct list_head * head, struct list_head * list)
   assert(head->prev != NULL);
   assert(list->next != NULL);
 
-  head->prev->next = list->next;
-  list->next->prev = head->prev;
-  head->prev = list->prev;
+  if (list_empty(list))
+  {
+  }
+  else if (list_empty(head))
+  {
+    head->next = list->next;
+    head->prev = list->prev;
+  }
+  else
+  {
+    head->prev->next = list->next;
+    list->next->prev = head->prev;
+    head->prev = list->prev;
+  }
 }
 
 bool list_empty(struct list_head * head)

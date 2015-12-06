@@ -465,14 +465,14 @@ void kernel_handle_task_return(void)
   // something else that would cause a another task to block on it.
   // If no tasks are blocked on this task then it will go in the zombie state
   // until some other task retrieves the return code.
-  assert(runningTask->blocking_len == 0 ||
-         runningTask->blocking_len == 1 &&
-         container_of(runningTask->blocking_head.next, struct task_s, blocked_node)->state == STATE_WAIT);
+  assert(tree_num_children(&runningTask->blocked) == 0 ||
+         tree_num_children(&runningTask->blocked) == 1 &&
+         container_of(tree_first_child(&runningTask->blocked), struct task_s, blocked)->state == STATE_WAIT);
 
-  if (runningTask->blocking_len == 1)
+  if (!tree_no_children(&runningTask->blocked))
   {
     // Another task is already waiting for us. Give it the return code.
-    task_t * task = container_of(runningTask->blocking_head.next, struct task_s, blocked_node);
+    task_t * task = container_of(tree_first_child(&runningTask->blocked), struct task_s, blocked);
     task->waitResult = runningTask->waitResult;
 
     // We're no longer blocking the task that was waiting for us.

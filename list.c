@@ -13,10 +13,10 @@
 #include <stddef.h>
 #include <assert.h>
 
-void list_init(struct list_head * list)
+void list_init(struct list_head * head)
 {
-  list->next = list;
-  list->prev = list;
+  head->next = head;
+  head->prev = head;
 }
 
 void list_push_front(struct list_head * head, struct list_head * node)
@@ -55,4 +55,38 @@ void list_remove(struct list_head * node)
   node->next->prev = node->prev;
   node->next = node;
   node->prev = node;
+}
+
+void list_append(struct list_head * head, struct list_head * list)
+{
+  assert(head != NULL);
+  assert(list != NULL);
+  assert(head->prev != NULL);
+  assert(list->next != NULL);
+
+  head->prev->next = list->next;
+  list->next->prev = head->prev;
+  head->prev = list->prev;
+}
+
+bool list_empty(struct list_head * head)
+{
+  assert(head != NULL);
+  return head->next == head;
+}
+
+uint32_t list_size(struct list_head * head)
+{
+  uint32_t result = 0;
+  struct list_head * node;
+  list_for_each(node, head)
+  {
+    ++result;
+  }
+  return result;
+}
+
+struct list_head * list_front(struct list_head * head)
+{
+  return head->next;
 }

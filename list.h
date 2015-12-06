@@ -10,7 +10,10 @@
 #ifndef LIST_H
 #define LIST_H
 
-#include "util.h"
+#include "utils.h"
+
+#include <stdbool.h>
+#include <stdint.h>
 
 struct list_head
 {
@@ -19,14 +22,24 @@ struct list_head
 };
 
 // Initialize a list
-void list_init(struct list_head * list);
+void list_init(struct list_head * head);
 
 // Add a node to the front/back of the list
-void list_push_front(struct list_head * list, struct list_head * node);
-void list_push_back(struct list_head * list, struct list_head * node);
+void list_push_front(struct list_head * head, struct list_head * node);
+void list_push_back(struct list_head * head, struct list_head * node);
 
-// Remove an element from the list.
+// Remove an element from a list.
 void list_remove(struct list_head * node);
+
+// Append a list at the back of the list.
+void list_append(struct list_head * head, struct list_head * list);
+
+// Returns true if the list is empty.
+bool list_empty(struct list_head * head);
+
+uint32_t list_size(struct list_head * head);
+
+struct list_head * list_front(struct list_head * head);
 
 // Iterates over a list. It's not safe to remove items from the list
 // with this version. Use list_for_each_safe() instead.

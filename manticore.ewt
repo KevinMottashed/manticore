@@ -2148,6 +2148,9 @@
     <name>$PROJ_DIR$\task_busy_yield.s</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\tree.c</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\vector_table.s</name>
   </file>
 </project>

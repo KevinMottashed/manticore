@@ -16,6 +16,7 @@
 #include "channel.h"
 #include "syscall.h"
 #include "list.h"
+#include "tree.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -74,12 +75,10 @@ typedef struct task_s
   uint8_t provisionedPriority;
   uint8_t priority;
 
-  // List head for the tasks that this task is blocking.
-  uint32_t blocking_len;
-  struct list_head blocking_head;
-
-  // List node for the task that this task is blocked on.
-  struct list_head blocked_node;
+  // The relationship between blocked tasks is a tree.
+  // Children are blocked on their parent and a parent blocks all its children.
+  // A root node is blocked on nothing.
+  struct tree_head blocked;
 
   // List node used for whatever this task is waiting for.
   struct list_head wait_node;

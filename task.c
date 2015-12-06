@@ -33,13 +33,11 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   task->provisionedPriority = priority;
   task->priority = priority;
   task->stackPointer = (uint32_t)stack + stackSize;
-  task->stackPointer &= ~0x7; // The stack must be 8 byte aligned.
+  task->stackPointer &= ~0x7u; // The stack must be 8 byte aligned.
   task->stackPointer -= sizeof(context_t);
   task->stack = stack;
   *(uint32_t*)task->stack = TASK_STACK_MAGIC;
-  list_init(&task->blocking_head);
-  list_init(&task->blocked_node);
-  task->blocking_len = 0;
+  tree_init(&task->blocked);
 
   context_t * context = (context_t*)task->stackPointer;
   memset(context, 0, sizeof(*context)); // Most registers will start off as zero.
@@ -97,8 +95,8 @@ bool task_add_blocked(task_t * task, task_t * blocked)
   assert(task != NULL);
   assert(blocked != NULL);
 
-  ++task->blocking_len;
-  list_push_back(&task->blocking_head, &blocked->blocked_node);
+  // Add the blocked task as a child in the tree
+  tree_add_child(&task->blocked, &blocked->blocked);
 
   // Check if our priority needs to be increased.
   if (blocked->priority > task->priority)
@@ -114,8 +112,9 @@ bool task_remove_blocked(task_t * task, task_t * unblocked)
   assert(task != NULL);
   assert(unblocked != NULL);
 
-  --task->blocking_len;
-  list_remove(&unblocked->blocked_node);
+  // Remove the unblocked task from the blocked tree.
+  // We're no longer blocked on the parent task.
+  tree_remove_child(&unblocked->blocked);
 
   // A task that was blocked on us should never have a higher priority.
   assert(task->priority >= unblocked->priority);
@@ -126,10 +125,10 @@ bool task_remove_blocked(task_t * task, task_t * unblocked)
     // The unblocked task may be responsible for this tasks increased
     // priority. We need to reevaluate the priority.
     uint8_t newPriority = task->provisionedPriority;
-    struct list_head * node;
-    list_for_each (node, &task->blocking_head)
+    struct tree_head * node;
+    tree_for_each_direct (node, &task->blocked)
     {
-      task_t * blocked = container_of(node, struct task_s, blocked_node);
+      task_t * blocked = container_of(node, struct task_s, blocked);
       assert(task->priority >= blocked->priority);
       newPriority = MAX(newPriority, blocked->priority);
     }
@@ -154,10 +153,10 @@ bool task_update_blocked(task_t * task, task_t * blocked)
   else if (blocked->priority < task->priority)
   {
     uint8_t newPriority = task->provisionedPriority;
-    struct list_head * node;
-    list_for_each(node, &task->blocking_head)
+    struct tree_head * node;
+    tree_for_each_direct (node, &task->blocked)
     {
-      task_t * blocked = container_of(node, struct task_s, blocked_node);
+      task_t * blocked = container_of(node, struct task_s, blocked);
       assert(task->priority >= blocked->priority);
       newPriority = MAX(newPriority, blocked->priority);
     }
@@ -209,7 +208,7 @@ void task_reschedule(task_t * task)
 void task_destroy(task_t * task)
 {
   assert(task != NULL);
-  assert(task->blocking_len == 0);
+  assert(tree_no_children(&task->blocked));
   heap_free(task);
 }
 

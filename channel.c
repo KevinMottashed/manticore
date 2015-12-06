@@ -25,7 +25,6 @@ channel_handle_t channel_create(void)
 
   channel_t * channel = heap_malloc(sizeof(*channel));
   channel->id = channelId++;
-  channel->num_waiting_tasks = 0;
   list_init(&channel->waiting_tasks);
   channel->receive = NULL;
   channel->reply = NULL;

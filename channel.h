@@ -26,7 +26,6 @@ typedef struct channel_s
   int id;
 
   // The list of tasks that have sent messages.
-  uint32_t num_waiting_tasks;
   struct list_head waiting_tasks;
 
   struct task_s * receive; // The task waiting for a message.

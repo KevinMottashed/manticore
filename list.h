@@ -38,8 +38,10 @@ void list_append(struct list_head * head, struct list_head * list);
 bool list_empty(struct list_head * head);
 
 uint32_t list_size(struct list_head * head);
-
 struct list_head * list_front(struct list_head * head);
+
+// Returns true if the list contains the node
+bool list_contains(struct list_head * head, struct list_head * node);
 
 // Iterates over a list. It's not safe to remove items from the list
 // with this version. Use list_for_each_safe() instead.

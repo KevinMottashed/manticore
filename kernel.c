@@ -69,17 +69,26 @@ static void kernel_handle_task_wait(void);
 // Internal OS tasks
 #pragma data_alignment = 8
 uint8_t idle_task_stack[128];
+#pragma data_alignment = 8
+uint8_t init_task_stack[128];
+
 static __task void * kernel_task_idle(void * arg);
+static __task void * kernel_task_init(void * arg);
 
 void manticore_init(void)
 {
-  // Initialize the ready queue and the vector of sleeping tasks.
+  // Initialize the lists of ready/sleeping tasks.
   list_init(&ready_tasks);
   list_init(&sleeping_tasks);
 
-  // Create the idle task and set it as the initial running task.
+  // Create the init task and set it as the initial running task.
+  struct task_s * init = task_create(kernel_task_init, NULL, init_task_stack, sizeof(init_task_stack), 1);
+  init->state = STATE_RUNNING;
+  runningTask = init;
+  list_remove(&init->wait_node);
+
+  // Create the idle task.
   struct task_s * idle = task_create(kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
-  runningTask = idle;
 }
 
 void manticore_main(void)
@@ -238,7 +247,6 @@ void kernel_handle_syscall(uint8_t value)
   switch (value)
   {
   case SYSCALL_NONE:
-    break;
   case SYSCALL_YIELD:
     kernel_handle_yield();
     break;
@@ -353,7 +361,7 @@ void kernel_handle_mutex_unlock(void)
 void kernel_handle_channel_send(void)
 {
   // Save the message and channel
-  channel_t * channel = runningTask->channel.c;
+  channel_t * channel = runningTask->channel;
 
   task_t * recv = channel->receive;
   if (recv != NULL)
@@ -369,9 +377,9 @@ void kernel_handle_channel_send(void)
     channel->reply = runningTask;
 
     // Copy the message from the sender to the receiver.
-    assert(recv->channel.len >= runningTask->channel.len);
-    memcpy(recv->channel.msg, runningTask->channel.msg, runningTask->channel.len);
-    recv->channel.len = runningTask->channel.len;
+    assert(recv->channel_len >= runningTask->channel_len);
+    memcpy(recv->channel_msg, runningTask->channel_msg, runningTask->channel_len);
+    recv->channel_len = runningTask->channel_len;
 
     // The receiver is now blocking the sender;
     bool reschedule = task_add_blocked(recv, runningTask);
@@ -390,7 +398,7 @@ void kernel_handle_channel_send(void)
 
 void kernel_handle_channel_recv(void)
 {
-  struct task_s * send = get_next_task(&runningTask->channel.c->waiting_tasks);
+  struct task_s * send = get_next_task(&runningTask->channel->waiting_tasks);
   if (send != NULL)
   {
     // A task has already sent a message to this channel.
@@ -401,14 +409,14 @@ void kernel_handle_channel_recv(void)
     list_remove(&send->wait_node);
 
     // The task that sent the message becomes reply blocked.
-    runningTask->channel.c->reply = send;
-    runningTask->channel.c->server = runningTask;
+    runningTask->channel->reply = send;
+    runningTask->channel->server = runningTask;
     send->state = STATE_CHANNEL_RPLY;
 
     // Copy the message from the sender to the receiver.
-    assert(runningTask->channel.len >= send->channel.len);
-    memcpy(runningTask->channel.msg, send->channel.msg, send->channel.len);
-    runningTask->channel.len = send->channel.len;
+    assert(runningTask->channel_len >= send->channel_len);
+    memcpy(runningTask->channel_msg, send->channel_msg, send->channel_len);
+    runningTask->channel_len = send->channel_len;
 
     // The receiver is now blocking the sender.
     bool reschedule = task_add_blocked(runningTask, send);
@@ -422,22 +430,22 @@ void kernel_handle_channel_recv(void)
     // No one has sent us a message :-(
     // We become receive blocked.
     runningTask->state = STATE_CHANNEL_RECV;
-    runningTask->channel.c->receive = runningTask;
+    runningTask->channel->receive = runningTask;
   }
 }
 
 void kernel_handle_channel_reply(void)
 {
-  channel_t * channel = runningTask->channel.c;
-  void * msg = runningTask->channel.msg;
-  size_t len = runningTask->channel.len;
+  channel_t * channel = runningTask->channel;
+  void * msg = runningTask->channel_msg;
+  size_t len = runningTask->channel_len;
 
   // Copy the reply to the task that sent us a message.
   task_t * replyTask = channel->reply;
   assert(replyTask != NULL);
-  assert(replyTask->channel.len >= len);
-  memcpy(replyTask->channel.reply, msg, len);
-  *replyTask->channel.replyLen = len;
+  assert(replyTask->channel_len >= len);
+  memcpy(replyTask->channel_reply, msg, len);
+  *replyTask->channel_reply_len = len;
   channel->reply = NULL;
   channel->server = NULL;
 
@@ -469,55 +477,89 @@ void kernel_handle_task_return(void)
          tree_num_children(&runningTask->blocked) == 1 &&
          container_of(tree_first_child(&runningTask->blocked), struct task_s, blocked)->state == STATE_WAIT);
 
-  if (!tree_no_children(&runningTask->blocked))
-  {
-    // Another task is already waiting for us. Give it the return code.
-    task_t * task = container_of(tree_first_child(&runningTask->blocked), struct task_s, blocked);
-    task->waitResult = runningTask->waitResult;
+  struct task_s * parent = container_of(runningTask->family.parent, struct task_s, family);
 
-    // We're no longer blocking the task that was waiting for us.
-    bool reschedule = task_remove_blocked(runningTask, task);
-    if (reschedule)
+  // Check if our parent is waiting for us or any of it's children.
+  if (parent->state == STATE_WAIT &&
+      (parent->wait == NULL || *parent->wait == NULL || *parent->wait == runningTask))
+  {
+    // The parent is already waiting for us. Give it the return code.
+    parent->waitResult = runningTask->waitResult;
+
+    // We're no longer blocking the parent task.
+    task_remove_blocked(runningTask, parent);
+
+    if (parent->wait != NULL)
     {
-      task_reschedule(runningTask);
+      *parent->wait = runningTask;
     }
 
-    // The other task becomes ready and the returned task ceases to exist.
-    task->state = STATE_READY;
-    list_push_back(&ready_tasks, &task->wait_node);
+    // The parent task becomes ready and the returned task ceases to exist.
+    parent->state = STATE_READY;
+    list_push_back(&ready_tasks, &parent->wait_node);
     task_destroy(runningTask);
   }
   else
   {
-    // No one is waiting for this task. Go into the zombie state until
-    // someone retrieves the return code.
+    // The parent isn't waiting for us.
+    // Go into the zombie state until the parent reaps us.
     runningTask->state = STATE_ZOMBIE;
   }
 }
 
 void kernel_handle_task_wait(void)
 {
-  assert(runningTask->wait != NULL);
+  // It makes no sense to call wait when we have no children.
+  assert(tree_num_children(&runningTask->family) > 0);
 
-  task_t * task = runningTask->wait;
-  if (task->state == STATE_ZOMBIE)
+  if (runningTask->wait != NULL && *runningTask->wait != NULL)
   {
-    // The other task has already returned.
-    // Take the return value and destroy it.
-    runningTask->state = STATE_READY;
-    list_push_back(&ready_tasks, &runningTask->wait_node);
-    runningTask->waitResult = task->waitResult;
-    task_destroy(task);
+    // We're waiting for a specific child task.
+    struct task_s * child = *runningTask->wait;
+    assert(child->family.parent == &runningTask->family);
+    if (child->state == STATE_ZOMBIE)
+    {
+      // The child task has already returned.
+      // Take the return value and destroy it.
+      runningTask->state = STATE_READY;
+      list_push_back(&ready_tasks, &runningTask->wait_node);
+      runningTask->waitResult = child->waitResult;
+      task_destroy(child);
+    }
+    else
+    {
+      // The child task hasn't returned yet. Wait for it.
+      bool reschedule = task_add_blocked(child, runningTask);
+      if (reschedule)
+      {
+        task_reschedule(child);
+      }
+      runningTask->state = STATE_WAIT;
+    }
   }
   else
   {
-    // The other task hasn't returned yet. Wait for it.
-    bool reschedule = task_add_blocked(task, runningTask);
-    if (reschedule)
+    // We're waiting for any child task to return.
+    // Check if there's already one that's returned.
+    struct tree_head * node;
+    tree_for_each_direct(node, &runningTask->family)
     {
-      task_reschedule(task);
+      struct task_s * child = container_of(node, struct task_s, family);
+      if (child->state == STATE_ZOMBIE)
+      {
+        // A child already terminated.
+        if (runningTask->wait != NULL)
+        {
+          *runningTask->wait = child;
+        }
+
+        runningTask->state = STATE_READY;
+        list_push_back(&ready_tasks, &runningTask->wait_node);
+        runningTask->waitResult = child->waitResult;
+        task_destroy(child);
+        break;
+      }
     }
-    runningTask->state = STATE_WAIT;
   }
 }
 
@@ -556,5 +598,14 @@ static __task void * kernel_task_idle(void * arg)
   {
     // All that the idle task needs to do is wait for interrupts.
     __WFI();
+  }
+}
+
+static __task void * kernel_task_init(void * arg)
+{
+  while (true)
+  {
+    // The init task is used to reap tasks that have returned.
+    task_wait(NULL);
   }
 }

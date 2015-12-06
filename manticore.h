@@ -3,7 +3,7 @@
  * "THE BEER-WARE LICENSE" (Revision 42):
  * <kevinmottashed@gmail.com> wrote this file. As long as you retain this notice you
  * can do whatever you want with this stuff. If we meet some day, and you think
- * this stuff is worth it, you can buy me a beer in return. 
+ * this stuff is worth it, you can buy me a beer in return.
  * -Kevin Mottashed
  * ----------------------------------------------------------------------------
  */
@@ -41,8 +41,8 @@ typedef struct task_s * task_handle_t;
 
 // Entry signature for all tasks
 // The __task specifier informs the compiler that the function is an
-// RTOS task. This means that the normal calling don't need to be followed
-// and that it only needs to preserve the LR register.
+// RTOS task. This means that the normal calling conventions don't need
+// to be followed and that it only needs to preserve the LR register.
 typedef void * (__task * task_entry_t)(void *);
 
 /**
@@ -54,18 +54,21 @@ typedef void * (__task * task_entry_t)(void *);
  * @param priority The priority of the new task.
  * @return A handle to the newly created task.
  */
-task_handle_t task_create(task_entry_t entry, 
-                          void * arg, 
-                          void * stack, 
-                          uint32_t stackSize, 
+task_handle_t task_create(task_entry_t entry,
+                          void * arg,
+                          void * stack,
+                          uint32_t stackSize,
                           uint8_t priority);
- 
+
 /**
  * Wait for a task to return.
- * @param The task to wait for.
+ * If <task> is NULL then wait for any child.
+ * If <task> points to NULL then wait for any child and update <task> with the child that terminated.
+ * If <task> points to non-NULL then wait for that child.
+ * @param task The task to wait for.
  * @return The value that the task returned.
  */
-void * task_wait(task_handle_t task);
+void * task_wait(task_handle_t * task);
 
 /**
  * Get a tasks priority.
@@ -144,7 +147,7 @@ channel_handle_t channel_create(void);
  * Send a message through a channel.
  * @param channel The channel to send the message to.
  * @param data The data to send.
- * @param len The len of data to send.
+ * @param len The length of data to send.
  * @param reply The buffer where the reply can be stored.
  * @param replyLen The length of the reply buffer.
  */

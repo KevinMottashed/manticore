@@ -35,27 +35,27 @@ channel_handle_t channel_create(void)
 
 void channel_send(channel_handle_t channel, void * msg, size_t len, void * reply, size_t * replyLen)
 {
-  runningTask->channel.c = channel;
-  runningTask->channel.msg = msg;
-  runningTask->channel.len = len;
-  runningTask->channel.reply = reply;
-  runningTask->channel.replyLen = replyLen;
+  runningTask->channel = channel;
+  runningTask->channel_msg = msg;
+  runningTask->channel_len = len;
+  runningTask->channel_reply = reply;
+  runningTask->channel_reply_len = replyLen;
   SVC_CHANNEL_SEND();
 }
 
 size_t channel_recv(channel_handle_t channel, void * msg, size_t len)
 {
-  runningTask->channel.c = channel;
-  runningTask->channel.msg = msg;
-  runningTask->channel.len = len;
+  runningTask->channel = channel;
+  runningTask->channel_msg = msg;
+  runningTask->channel_len = len;
   SVC_CHANNEL_RECV();
-  return runningTask->channel.len;
+  return runningTask->channel_len;
 }
 
 void channel_reply(channel_handle_t channel, void * msg, size_t len)
 {
-  runningTask->channel.c = channel;
-  runningTask->channel.msg = msg;
-  runningTask->channel.len = len;
+  runningTask->channel = channel;
+  runningTask->channel_msg = msg;
+  runningTask->channel_len = len;
   SVC_CHANNEL_REPLY();
 }

@@ -39,6 +39,12 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   *(uint32_t*)task->stack = TASK_STACK_MAGIC;
   tree_init(&task->blocked);
 
+  tree_init(&task->family);
+  if (runningTask != NULL)
+  {
+    tree_add_child(&runningTask->family, &task->family);
+  }
+
   context_t * context = (context_t*)task->stackPointer;
   memset(context, 0, sizeof(*context)); // Most registers will start off as zero.
   context->R0 = (uint32_t)arg;
@@ -57,7 +63,7 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   return task;
 }
 
-void * task_wait(task_handle_t task)
+void * task_wait(task_handle_t * task)
 {
   runningTask->wait = task;
   SVC_TASK_WAIT();
@@ -187,18 +193,19 @@ void task_reschedule(task_t * task)
   else if (task->state == STATE_CHANNEL_RPLY)
   {
     // We're waiting to receive a reply from another task.
-    bool reschedule = task_update_blocked(task->channel.c->server, task);
+    bool reschedule = task_update_blocked(task->channel->server, task);
     if (reschedule)
     {
-      task_reschedule(task->channel.c->server);
+      task_reschedule(task->channel->server);
     }
   }
-  else if (task->state == STATE_WAIT)
+  else if (task->state == STATE_WAIT && task->wait != NULL && *task->wait != NULL)
   {
-    bool reschedule = task_update_blocked(task->wait, task);
+    // Priority inheritence only applies when we're waiting on a specific child.
+    bool reschedule = task_update_blocked(*task->wait, task);
     if (reschedule)
     {
-      task_reschedule(task->wait);
+      task_reschedule(*task->wait);
     }
   }
 
@@ -208,7 +215,14 @@ void task_reschedule(task_t * task)
 void task_destroy(task_t * task)
 {
   assert(task != NULL);
+
+  // Make sure no tasks are blocked on a dying task
+  // or they'll be permanantly blocked.
   assert(tree_no_children(&task->blocked));
+
+  // Remove the task from the family tree.
+  tree_remove(&task->family);
+
   heap_free(task);
 }
 

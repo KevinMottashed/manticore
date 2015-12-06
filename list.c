@@ -101,3 +101,16 @@ struct list_head * list_front(struct list_head * head)
 {
   return head->next;
 }
+
+bool list_contains(struct list_head * head, struct list_head * node)
+{
+  struct list_head * it;
+  list_for_each(it, head)
+  {
+    if (it == node)
+    {
+      return true;
+    }
+  }
+  return false;
+}

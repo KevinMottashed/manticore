@@ -209,7 +209,7 @@ __task void * task_parent(void * arg)
     {
       // Test creating a task and wait for it to finish.
       task_handle_t child = task_create(&task_child, (void*)i, stack, 128, task_get_priority(NULL) - 1);
-      int result = (int)task_wait(child);
+      int result = (int)task_wait(&child);
       assert(result == i);
     }
   }

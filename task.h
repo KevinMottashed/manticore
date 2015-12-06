@@ -80,6 +80,9 @@ typedef struct task_s
   // A root node is blocked on nothing.
   struct tree_head blocked;
 
+  // The tree that represents the parent/child relationship between tasks.
+  struct tree_head family;
+
   // List node used for whatever this task is waiting for.
   struct list_head wait_node;
 
@@ -96,20 +99,23 @@ typedef struct task_s
     struct channel_context_s
     {
       // The channel that we're block on
-      struct channel_s * c;
+      struct channel_s * channel;
 
       // Used for storing the send/recv buffer.
-      void * msg;
-      size_t len;
+      void * channel_msg;
+      size_t channel_len;
 
       // Used for storing the reply buffer.
-      void * reply;
-      size_t * replyLen;
-    } channel;
+      void * channel_reply;
+      size_t * channel_reply_len;
+    };
 
     // The task we're waiting on and the result it returned.
-    struct task_s * wait;
-    void * waitResult;
+    struct
+    {
+      struct task_s ** wait;
+      void * waitResult;
+    };
   };
 } task_t;
 

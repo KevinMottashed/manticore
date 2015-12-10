@@ -13,19 +13,17 @@
 #include "gpio.h"
 #include "heap.h"
 #include "utils.h"
+#include "tests.h"
 
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 
-// 128 bytes of stack should be enough for these dummy tasks.
-#define NUM_TASKS (9)
-#define STACK_SIZE (128)
-
 // This collection of tasks are used to test the system.
 // I hope to eventually have a proper test framework but this will
 // have to do for now.
 extern __task void * Task_Busy_Yield(void * arg);
+static __task void * task_run_all_tests(void * arg);
 static __task void * task_mutex_try_lock(void * arg);
 static __task void * task_led3(void * arg);
 static __task void * task_led4(void * arg);
@@ -37,8 +35,9 @@ static __task void * task_parent(void * arg);
 static __task void * task_child(void * arg);
 
 // ARM requires 8 byte alignment for the stack.
+#define STACK_SIZE (256)
 #pragma data_alignment = 8
-static uint8_t stacks[NUM_TASKS][STACK_SIZE];
+static uint8_t stack[STACK_SIZE];
 
 static mutex_handle_t mutex;
 static channel_handle_t ledChannel;
@@ -226,6 +225,13 @@ __task void * task_child(void * arg)
   return arg;
 }
 
+__task void * task_run_all_tests(void * arg)
+{
+  test_run_all();
+  gpio_led3_on();
+  return NULL;
+}
+
 int main()
 {
   // Initialize the hardware.
@@ -244,6 +250,8 @@ int main()
   //
 
   //           Entry                Argument   Stack      Stack Size  Priority
+  task_create(task_run_all_tests,   NULL,      stack,     STACK_SIZE, 10);
+#if 0
   task_create(&Task_Busy_Yield,     NULL,      stacks[0], STACK_SIZE, 10);
   task_create(&task_mutex_try_lock, NULL,      stacks[1], STACK_SIZE, 10);
   task_create(&task_led3,           (void*)33, stacks[2], STACK_SIZE, 15);
@@ -253,6 +261,7 @@ int main()
   task_create(&task_mutex_lock2,    NULL,      stacks[6], STACK_SIZE, 10);
   task_create(&task_led_server,     NULL,      stacks[7], STACK_SIZE, 10);
   task_create(&task_parent,         NULL,      stacks[8], STACK_SIZE, 10);
+#endif
 
   // Start the kernel.
   manticore_main();

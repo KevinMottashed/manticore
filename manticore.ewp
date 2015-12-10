@@ -1888,6 +1888,9 @@
       <data/>
     </settings>
   </configuration>
+  <mfc_discard>
+    <configuration>Debug</configuration>
+  </mfc_discard>
   <file>
     <name>$PROJ_DIR$\channel.c</name>
   </file>
@@ -1926,6 +1929,9 @@
   </file>
   <file>
     <name>$PROJ_DIR$\task_busy_yield.s</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\tests.c</name>
   </file>
   <file>
     <name>$PROJ_DIR$\tree.c</name>

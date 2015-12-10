@@ -484,8 +484,11 @@ void kernel_handle_task_return(void)
     // The parent is already waiting for us. Give it the return code.
     parent->waitResult = runningTask->waitResult;
 
-    // We're no longer blocking the parent task.
-    task_remove_blocked(runningTask, parent);
+    if (parent->wait != NULL && *parent->wait == runningTask)
+    {
+      // The parent task was waiting for us. We're no longer blocking it.
+      task_remove_blocked(runningTask, parent);
+    }
 
     if (parent->wait != NULL)
     {
@@ -539,6 +542,7 @@ void kernel_handle_task_wait(void)
   {
     // We're waiting for any child task to return.
     // Check if there's already one that's returned.
+    runningTask->state = STATE_WAIT;
     struct tree_head * node;
     tree_for_each_direct(node, &runningTask->family)
     {

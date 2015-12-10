@@ -57,7 +57,15 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
 
   if (kernelRunning)
   {
-    kernel_scheduler_enable();
+    if (priority > task_get_priority(NULL))
+    {
+      // The new task has a higher priority than us. Yield to it.
+      task_yield();
+    }
+    else
+    {
+      kernel_scheduler_enable();
+    }
   }
 
   return task;

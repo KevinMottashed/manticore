@@ -21,7 +21,7 @@
 #include "list.h"
 #include "task.h"
 
-typedef struct channel_s
+struct channel
 {
   int id;
 
@@ -30,7 +30,7 @@ typedef struct channel_s
 
   struct task * receive; // The task waiting for a message.
   struct task * reply; // The task waiting for a reply.
-  struct task * server; // The task currently handing a message.
-} channel_t;
+  struct task * server; // The task currently handling a message.
+};
 
 #endif

@@ -46,12 +46,12 @@ typedef void * (__task * task_entry_t)(void *);
 
 /**
  * Initialize a new task.
+ * @param task The task to initialize.
  * @param entry The entry point for the new task.
  * @param arg The argument passed to the new task.
  * @param stack The memory used for the stack.
  * @param stackSize The size of the stack.
  * @param priority The priority of the new task.
- * @return A handle to the newly created task.
  */
 void task_init(struct task * task,
                task_entry_t entry,
@@ -131,14 +131,11 @@ void mutex_unlock(struct mutex * mutex);
 // Channel
 // --------------------------------------
 
-// Handle for channels.
-typedef struct channel_s * channel_handle_t;
-
 /**
- * Create a new channel.
- * @return A handle to the newly created channel.
+ * Initialize a new channel.
+ * @param channel The channel to initialize.
  */
-channel_handle_t channel_create(void);
+void channel_init(struct channel * channel);
 
 /**
  * Send a message through a channel.
@@ -146,13 +143,13 @@ channel_handle_t channel_create(void);
  * @param data The data to send.
  * @param len The length of data to send.
  * @param reply The buffer where the reply can be stored.
- * @param replyLen The length of the reply buffer.
+ * @param reply_len The length of the reply buffer.
  */
-void channel_send(channel_handle_t channel,
+void channel_send(struct channel * channel,
                   void * data,
                   size_t len,
                   void * reply,
-                  size_t * replyLen);
+                  size_t * reply_len);
 
 /**
  * Receive a message from a channel.
@@ -161,7 +158,7 @@ void channel_send(channel_handle_t channel,
  * @param len The length of the receive buffer.
  * @return The size of the received message.
  */
-size_t channel_recv(channel_handle_t channel, void * data, size_t len);
+size_t channel_recv(struct channel * channel, void * data, size_t len);
 
 /**
  * Reply to a previously received message.
@@ -169,6 +166,6 @@ size_t channel_recv(channel_handle_t channel, void * data, size_t len);
  * @param data The data to reply with.
  * @param len The length of the reply.
  */
-void channel_reply(channel_handle_t channel, void * data, size_t len);
+void channel_reply(struct channel * channel, void * data, size_t len);
 
 #endif

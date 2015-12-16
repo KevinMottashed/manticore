@@ -18,7 +18,7 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
   assert(stack != NULL);
   assert(stackSize >= sizeof(struct context));
 
-  if (kernelRunning)
+  if (kernel_running)
   {
     // We can't be preempted while creating a new task.
     kernel_scheduler_disable();
@@ -27,22 +27,22 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
   static uint8_t task_id_counter = 0;
   task->id = task_id_counter++;
   task->state = STATE_READY;
-  task->provisionedPriority = priority;
+  task->provisioned_priority = priority;
   task->priority = priority;
-  task->stackPointer = (uint32_t)stack + stackSize;
-  task->stackPointer &= ~0x7u; // The stack must be 8 byte aligned.
-  task->stackPointer -= sizeof(struct context);
+  task->stack_pointer = (uint32_t)stack + stackSize;
+  task->stack_pointer &= ~0x7u; // The stack must be 8 byte aligned.
+  task->stack_pointer -= sizeof(struct context);
   task->stack = stack;
   *(uint32_t*)task->stack = TASK_STACK_MAGIC;
   tree_init(&task->blocked);
 
   tree_init(&task->family);
-  if (runningTask != NULL)
+  if (running_task != NULL)
   {
-    tree_add_child(&runningTask->family, &task->family);
+    tree_add_child(&running_task->family, &task->family);
   }
 
-  struct context * context = (struct context*)task->stackPointer;
+  struct context * context = (struct context*)task->stack_pointer;
   memset(context, 0, sizeof(*context)); // Most registers will start off as zero.
   context->R0 = (uint32_t)arg;
   context->LR = (uint32_t)task_return;
@@ -52,7 +52,7 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
   // Add the task to the queue of ready tasks.
   list_push_back(&ready_tasks, &task->wait_node);
 
-  if (kernelRunning)
+  if (kernel_running)
   {
     if (priority > task_get_priority(NULL))
     {
@@ -68,16 +68,16 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
 
 void * task_wait(struct task ** task)
 {
-  runningTask->wait = task;
+  running_task->wait = task;
   SVC_TASK_WAIT();
-  return runningTask->waitResult;
+  return running_task->wait_result;
 }
 
 uint8_t task_get_priority(struct task * task)
 {
   if (task == NULL)
   {
-    return runningTask->priority;
+    return running_task->priority;
   }
   return task->priority;
 }
@@ -95,7 +95,7 @@ void task_sleep(unsigned int seconds)
 
 void task_delay(unsigned int ms)
 {
-  runningTask->sleep = ms;
+  running_task->sleep = ms;
   SVC_SLEEP();
 }
 
@@ -129,11 +129,11 @@ bool task_remove_blocked(struct task * task, struct task * unblocked)
   assert(task->priority >= unblocked->priority);
 
   if (unblocked->priority == task->priority &&
-      task->provisionedPriority != task->priority)
+      task->provisioned_priority != task->priority)
   {
     // The unblocked task may be responsible for this tasks increased
     // priority. We need to reevaluate the priority.
-    uint8_t newPriority = task->provisionedPriority;
+    uint8_t newPriority = task->provisioned_priority;
     struct tree_head * node;
     tree_for_each_direct (node, &task->blocked)
     {
@@ -161,7 +161,7 @@ bool task_update_blocked(struct task * task, struct task * blocked)
   // Check if our priority needs to be decreased.
   else if (blocked->priority < task->priority)
   {
-    uint8_t newPriority = task->provisionedPriority;
+    uint8_t newPriority = task->provisioned_priority;
     struct tree_head * node;
     tree_for_each_direct (node, &task->blocked)
     {
@@ -225,13 +225,11 @@ void task_destroy(struct task * task)
 
   // Remove the task from the family tree.
   tree_remove(&task->family);
-
-  heap_free(task);
 }
 
 void task_return(void * result)
 {
-  runningTask->waitResult = result;
+  running_task->wait_result = result;
   SVC_TASK_RETURN();
   // will never get here
   assert(false);

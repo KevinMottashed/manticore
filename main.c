@@ -40,7 +40,7 @@ static __task void * task_child(void * arg);
 static uint8_t stack[STACK_SIZE];
 
 static struct mutex mutex;
-static channel_handle_t ledChannel;
+static struct channel led_channel;
 
 // The message format used to communicate with the LED task.
 typedef struct led_cmd_s
@@ -86,7 +86,7 @@ __task void * task_led3(void * arg)
   {
     size_t replyLen = sizeof(reply);
     cmd.state = on;
-    channel_send(ledChannel, &cmd, sizeof(cmd), &reply, &replyLen);
+    channel_send(&led_channel, &cmd, sizeof(cmd), &reply, &replyLen);
     assert(replyLen == sizeof(reply));
     assert(reply.ok);
     task_delay(x);
@@ -106,7 +106,7 @@ __task void * task_led4(void * arg)
   {
     size_t replyLen = sizeof(reply);
     cmd.state = on;
-    channel_send(ledChannel, &cmd, sizeof(cmd), &reply, &replyLen);
+    channel_send(&led_channel, &cmd, sizeof(cmd), &reply, &replyLen);
     assert(replyLen == sizeof(reply));
     assert(reply.ok);
     task_delay(x);
@@ -160,7 +160,7 @@ __task void * task_led_server(void * arg)
     led_cmd_t cmd;
     led_cmd_reply_t reply;
 
-    size_t len = channel_recv(ledChannel, &cmd, sizeof(cmd));
+    size_t len = channel_recv(&led_channel, &cmd, sizeof(cmd));
     assert(len == sizeof(cmd));
 
     if (cmd.led == 3 && cmd.state == true)
@@ -192,7 +192,7 @@ __task void * task_led_server(void * arg)
     {
       reply.ok = false;
     }
-    channel_reply(ledChannel, &reply, sizeof(reply));
+    channel_reply(&led_channel, &reply, sizeof(reply));
 
     // We should be back to our original priority.
     assert(task_get_priority(NULL) == 10);
@@ -244,7 +244,7 @@ int main()
 
   // Create some synchronization mechanisms.
   mutex_init(&mutex);
-  ledChannel = channel_create();
+  channel_init(&led_channel);
 
   //
   // Create all the tasks.

@@ -19,42 +19,39 @@
 
 #include <assert.h>
 
-channel_handle_t channel_create(void)
+void channel_init(struct channel * channel)
 {
-  static int channelId = 0;
-
-  channel_t * channel = heap_malloc(sizeof(*channel));
-  channel->id = channelId++;
+  static int channel_id = 0;
+  channel->id = channel_id++;
   list_init(&channel->waiting_tasks);
   channel->receive = NULL;
   channel->reply = NULL;
   channel->server = NULL;
-  return channel;
 }
 
-void channel_send(channel_handle_t channel, void * msg, size_t len, void * reply, size_t * replyLen)
+void channel_send(struct channel * channel, void * msg, size_t len, void * reply, size_t * reply_len)
 {
-  runningTask->channel = channel;
-  runningTask->channel_msg = msg;
-  runningTask->channel_len = len;
-  runningTask->channel_reply = reply;
-  runningTask->channel_reply_len = replyLen;
+  running_task->channel = channel;
+  running_task->channel_msg = msg;
+  running_task->channel_len = len;
+  running_task->channel_reply = reply;
+  running_task->channel_reply_len = reply_len;
   SVC_CHANNEL_SEND();
 }
 
-size_t channel_recv(channel_handle_t channel, void * msg, size_t len)
+size_t channel_recv(struct channel * channel, void * msg, size_t len)
 {
-  runningTask->channel = channel;
-  runningTask->channel_msg = msg;
-  runningTask->channel_len = len;
+  running_task->channel = channel;
+  running_task->channel_msg = msg;
+  running_task->channel_len = len;
   SVC_CHANNEL_RECV();
-  return runningTask->channel_len;
+  return running_task->channel_len;
 }
 
-void channel_reply(channel_handle_t channel, void * msg, size_t len)
+void channel_reply(struct channel * channel, void * msg, size_t len)
 {
-  runningTask->channel = channel;
-  runningTask->channel_msg = msg;
-  runningTask->channel_len = len;
+  running_task->channel = channel;
+  running_task->channel_msg = msg;
+  running_task->channel_len = len;
   SVC_CHANNEL_REPLY();
 }

@@ -65,13 +65,13 @@ struct context
 struct task
 {
   uint32_t id;
-  uint32_t stackPointer;
+  uint32_t stack_pointer;
   void * stack;
   enum task_state state;
 
   // The provisioned and real priorities. The real priority is updated
   // via priority inheritence when other tasks block/unblock on this task.
-  uint8_t provisionedPriority;
+  uint8_t provisioned_priority;
   uint8_t priority;
 
   // The relationship between blocked tasks is a tree.
@@ -95,10 +95,10 @@ struct task
     // The mutex we're waiting on.
     struct mutex * mutex;
 
-    struct channel_context_s
+    struct channel_context
     {
       // The channel that we're block on
-      struct channel_s * channel;
+      struct channel * channel;
 
       // Used for storing the send/recv buffer.
       void * channel_msg;
@@ -113,7 +113,7 @@ struct task
     struct
     {
       struct task ** wait;
-      void * waitResult;
+      void * wait_result;
     };
   };
 };

@@ -13,10 +13,10 @@
 
 static void task_return(void * result);
 
-task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
+struct task * task_create(task_entry_t entry, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
 {
   assert(stack != NULL);
-  assert(stackSize >= sizeof(context_t));
+  assert(stackSize >= sizeof(struct context));
 
   if (kernelRunning)
   {
@@ -24,7 +24,7 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
     kernel_scheduler_disable();
   }
 
-  task_t * task = heap_malloc(sizeof(*task));
+  struct task * task = heap_malloc(sizeof(*task));
   assert(task != NULL);
 
   static uint8_t taskIdCounter = 0;
@@ -34,7 +34,7 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   task->priority = priority;
   task->stackPointer = (uint32_t)stack + stackSize;
   task->stackPointer &= ~0x7u; // The stack must be 8 byte aligned.
-  task->stackPointer -= sizeof(context_t);
+  task->stackPointer -= sizeof(struct context);
   task->stack = stack;
   *(uint32_t*)task->stack = TASK_STACK_MAGIC;
   tree_init(&task->blocked);
@@ -45,7 +45,7 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
     tree_add_child(&runningTask->family, &task->family);
   }
 
-  context_t * context = (context_t*)task->stackPointer;
+  struct context * context = (struct context*)task->stackPointer;
   memset(context, 0, sizeof(*context)); // Most registers will start off as zero.
   context->R0 = (uint32_t)arg;
   context->LR = (uint32_t)&task_return;
@@ -71,14 +71,14 @@ task_handle_t task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   return task;
 }
 
-void * task_wait(task_handle_t * task)
+void * task_wait(struct task ** task)
 {
   runningTask->wait = task;
   SVC_TASK_WAIT();
   return runningTask->waitResult;
 }
 
-uint8_t task_get_priority(task_handle_t task)
+uint8_t task_get_priority(struct task * task)
 {
   if (task == NULL)
   {
@@ -104,7 +104,7 @@ void task_delay(unsigned int ms)
   SVC_SLEEP();
 }
 
-bool task_add_blocked(task_t * task, task_t * blocked)
+bool task_add_blocked(struct task * task, struct task * blocked)
 {
   assert(task != NULL);
   assert(blocked != NULL);
@@ -121,7 +121,7 @@ bool task_add_blocked(task_t * task, task_t * blocked)
   return false;
 }
 
-bool task_remove_blocked(task_t * task, task_t * unblocked)
+bool task_remove_blocked(struct task * task, struct task * unblocked)
 {
   assert(task != NULL);
   assert(unblocked != NULL);
@@ -142,7 +142,7 @@ bool task_remove_blocked(task_t * task, task_t * unblocked)
     struct tree_head * node;
     tree_for_each_direct (node, &task->blocked)
     {
-      task_t * blocked = container_of(node, struct task_s, blocked);
+      struct task * blocked = container_of(node, struct task, blocked);
       assert(task->priority >= blocked->priority);
       newPriority = MAX(newPriority, blocked->priority);
     }
@@ -155,7 +155,7 @@ bool task_remove_blocked(task_t * task, task_t * unblocked)
   return false;
 }
 
-bool task_update_blocked(task_t * task, task_t * blocked)
+bool task_update_blocked(struct task * task, struct task * blocked)
 {
   // Check if our priority needs to be increased.
   if (blocked->priority > task->priority)
@@ -170,7 +170,7 @@ bool task_update_blocked(task_t * task, task_t * blocked)
     struct tree_head * node;
     tree_for_each_direct (node, &task->blocked)
     {
-      task_t * blocked = container_of(node, struct task_s, blocked);
+      struct task * blocked = container_of(node, struct task, blocked);
       assert(task->priority >= blocked->priority);
       newPriority = MAX(newPriority, blocked->priority);
     }
@@ -183,7 +183,7 @@ bool task_update_blocked(task_t * task, task_t * blocked)
   return false;
 }
 
-void task_reschedule(task_t * task)
+void task_reschedule(struct task * task)
 {
   assert(task != NULL);
   assert(task->state != STATE_RUNNING);
@@ -220,7 +220,7 @@ void task_reschedule(task_t * task)
   return;
 }
 
-void task_destroy(task_t * task)
+void task_destroy(struct task * task)
 {
   assert(task != NULL);
 
@@ -242,7 +242,7 @@ void task_return(void * result)
   assert(false);
 }
 
-bool task_check(task_t * task)
+bool task_check(struct task * task)
 {
   // Make sure the stack didn't overflow.
   return *(uint32_t*)task->stack == TASK_STACK_MAGIC;

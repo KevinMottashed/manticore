@@ -22,7 +22,7 @@ struct mutex
 {
   uint8_t id; // Unique identifier for this mutex.
   bool locked;
-  struct task_s * owner; // The task that owns this mutex.
+  struct task * owner; // The task that owns this mutex.
 
   // The list of tasks waiting for this mutex.
   struct list_head waiting_tasks;

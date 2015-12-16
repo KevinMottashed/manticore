@@ -27,7 +27,7 @@ void kernel_scheduler_enable(void);
 extern struct list_head ready_tasks;
 
 // The task that's currently running.
-extern task_t * runningTask;
+extern struct task * runningTask;
 
 // True once manticore_main() has been called.
 extern bool kernelRunning;

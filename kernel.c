@@ -45,14 +45,14 @@
 volatile uint8_t syscallValue;
 volatile uint32_t * savedStackPointer;
 
-task_t * runningTask = NULL;
+struct task * runningTask = NULL;
 bool kernelRunning = false;
 
 struct list_head ready_tasks;
 static struct list_head sleeping_tasks;
 
 static void kernel_update_sleep(unsigned int ticks);
-static struct task_s * get_next_task(struct list_head * list);
+static struct task * get_next_task(struct list_head * list);
 
 // Handle the various system calls
 static void kernel_handle_syscall(uint8_t value);
@@ -82,13 +82,13 @@ void manticore_init(void)
   list_init(&sleeping_tasks);
 
   // Create the init task and set it as the initial running task.
-  struct task_s * init = task_create(kernel_task_init, NULL, init_task_stack, sizeof(init_task_stack), 1);
+  struct task * init = task_create(kernel_task_init, NULL, init_task_stack, sizeof(init_task_stack), 1);
   init->state = STATE_RUNNING;
   runningTask = init;
   list_remove(&init->wait_node);
 
   // Create the idle task.
-  struct task_s * idle = task_create(kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
+  struct task * idle = task_create(kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
 }
 
 void manticore_main(void)
@@ -116,7 +116,7 @@ void manticore_main(void)
     // priority ready task will always run next and will never yield to
     // a lower priority task. The next task to run is the one at
     // the front of the priority queue.
-    struct task_s * nextTask = get_next_task(&ready_tasks);
+    struct task * nextTask = get_next_task(&ready_tasks);
     assert(nextTask != NULL);
     list_remove(&nextTask->wait_node);
 
@@ -129,7 +129,7 @@ void manticore_main(void)
       // if the next task has the same priority as the task we're about
       // to run. This ensures the CPU is shared between all the
       // highest priority tasks.
-      task_t * temp = get_next_task(&ready_tasks);
+      struct task * temp = get_next_task(&ready_tasks);
       if (temp != NULL && temp->priority == nextTask->priority)
       {
         sleep = TIME_SLICE_TICKS;
@@ -138,7 +138,7 @@ void manticore_main(void)
       struct list_head * node;
       list_for_each(node, &sleeping_tasks)
       {
-        task_t * t = container_of(node, struct task_s, wait_node);
+        struct task * t = container_of(node, struct task, wait_node);
         if (t->priority > nextTask->priority)
         {
           // A higher priority sleeping task can reduce the sleep time
@@ -161,7 +161,7 @@ void manticore_main(void)
       struct list_head * node;
       list_for_each(node, &sleeping_tasks)
       {
-        task_t * t = container_of(node, struct task_s, wait_node);
+        struct task * t = container_of(node, struct task, wait_node);
         sleep = MIN(sleep, t->sleep);
       }
     }
@@ -210,7 +210,7 @@ void kernel_update_sleep(unsigned int ticks)
   struct list_head * node;
   list_for_each_safe(node, &sleeping_tasks)
   {
-    struct task_s * t = container_of(node, struct task_s, wait_node);
+    struct task * t = container_of(node, struct task, wait_node);
     if (ticks >= t->sleep)
     {
       // The task is ready. Remove it from the sleep vector.
@@ -226,13 +226,13 @@ void kernel_update_sleep(unsigned int ticks)
   }
 }
 
-static struct task_s * get_next_task(struct list_head * list)
+static struct task * get_next_task(struct list_head * list)
 {
-  struct task_s * next_task = NULL;
+  struct task * next_task = NULL;
   struct list_head * node;
   list_for_each(node, list)
   {
-    struct task_s * task = container_of(node, struct task_s, wait_node);
+    struct task * task = container_of(node, struct task, wait_node);
     if (next_task == NULL ||
         task->priority > next_task->priority)
     {
@@ -321,7 +321,7 @@ void kernel_handle_mutex_unlock(void)
   assert(mutex != NULL);
 
   // Unblock the next highest priority task waiting for this mutex.
-  task_t * newOwner = get_next_task(&mutex->waiting_tasks);
+  struct task * newOwner = get_next_task(&mutex->waiting_tasks);
   assert(newOwner != NULL);
   list_remove(&newOwner->wait_node);
   newOwner->state = STATE_READY;
@@ -335,14 +335,14 @@ void kernel_handle_mutex_unlock(void)
   // for the mutex. The new owner of the mutex is now blocking all those tasks.
   bool rescheduleOldOwner = false;
   bool rescheduleNewOwner = false;
-  task_t * oldOwner = mutex->owner;
+  struct task * oldOwner = mutex->owner;
   mutex->owner = newOwner;
   rescheduleOldOwner = task_remove_blocked(oldOwner, newOwner);
 
   struct list_head * node;
   list_for_each(node, &mutex->waiting_tasks)
   {
-    struct task_s * waiter = container_of(node, struct task_s, wait_node);
+    struct task * waiter = container_of(node, struct task, wait_node);
     rescheduleOldOwner |= task_remove_blocked(oldOwner, waiter);
     rescheduleNewOwner |= task_add_blocked(newOwner, waiter);
   }
@@ -361,7 +361,7 @@ void kernel_handle_channel_send(void)
   // Save the message and channel
   channel_t * channel = runningTask->channel;
 
-  task_t * recv = channel->receive;
+  struct task * recv = channel->receive;
   if (recv != NULL)
   {
     // There's a task waiting for a message.
@@ -396,7 +396,7 @@ void kernel_handle_channel_send(void)
 
 void kernel_handle_channel_recv(void)
 {
-  struct task_s * send = get_next_task(&runningTask->channel->waiting_tasks);
+  struct task * send = get_next_task(&runningTask->channel->waiting_tasks);
   if (send != NULL)
   {
     // A task has already sent a message to this channel.
@@ -439,7 +439,7 @@ void kernel_handle_channel_reply(void)
   size_t len = runningTask->channel_len;
 
   // Copy the reply to the task that sent us a message.
-  task_t * replyTask = channel->reply;
+  struct task * replyTask = channel->reply;
   assert(replyTask != NULL);
   assert(replyTask->channel_len >= len);
   memcpy(replyTask->channel_reply, msg, len);
@@ -473,9 +473,9 @@ void kernel_handle_task_return(void)
   // until some other task retrieves the return code.
   assert(tree_num_children(&runningTask->blocked) == 0 ||
          tree_num_children(&runningTask->blocked) == 1 &&
-         container_of(tree_first_child(&runningTask->blocked), struct task_s, blocked)->state == STATE_WAIT);
+         container_of(tree_first_child(&runningTask->blocked), struct task, blocked)->state == STATE_WAIT);
 
-  struct task_s * parent = container_of(runningTask->family.parent, struct task_s, family);
+  struct task * parent = container_of(runningTask->family.parent, struct task, family);
 
   // Check if our parent is waiting for us or any of it's children.
   if (parent->state == STATE_WAIT &&
@@ -516,7 +516,7 @@ void kernel_handle_task_wait(void)
   if (runningTask->wait != NULL && *runningTask->wait != NULL)
   {
     // We're waiting for a specific child task.
-    struct task_s * child = *runningTask->wait;
+    struct task * child = *runningTask->wait;
     assert(child->family.parent == &runningTask->family);
     if (child->state == STATE_ZOMBIE)
     {
@@ -546,7 +546,7 @@ void kernel_handle_task_wait(void)
     struct tree_head * node;
     tree_for_each_direct(node, &runningTask->family)
     {
-      struct task_s * child = container_of(node, struct task_s, family);
+      struct task * child = container_of(node, struct task, family);
       if (child->state == STATE_ZOMBIE)
       {
         // A child already terminated.

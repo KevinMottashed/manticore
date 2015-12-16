@@ -38,9 +38,6 @@ void manticore_main(void);
 // Task
 // --------------------------------------
 
-// Handle for tasks.
-typedef struct task_s * task_handle_t;
-
 // Entry signature for all tasks
 // The __task specifier informs the compiler that the function is an
 // RTOS task. This means that the normal calling conventions don't need
@@ -56,7 +53,7 @@ typedef void * (__task * task_entry_t)(void *);
  * @param priority The priority of the new task.
  * @return A handle to the newly created task.
  */
-task_handle_t task_create(task_entry_t entry,
+struct task * task_create(task_entry_t entry,
                           void * arg,
                           void * stack,
                           uint32_t stackSize,
@@ -70,7 +67,7 @@ task_handle_t task_create(task_entry_t entry,
  * @param task The task to wait for.
  * @return The value that the task returned.
  */
-void * task_wait(task_handle_t * task);
+void * task_wait(struct task ** task);
 
 /**
  * Get a tasks priority.
@@ -78,7 +75,7 @@ void * task_wait(task_handle_t * task);
  *             return the callers priority.
  * @return The priority of <task>.
  */
-uint8_t task_get_priority(task_handle_t task);
+uint8_t task_get_priority(struct task * task);
 
 /**
  * Put the calling task to sleep.

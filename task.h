@@ -24,7 +24,7 @@
 #define MIN_PRIORITY (0)
 #define MAX_PRIORITY (255)
 
-typedef enum task_state_e
+enum task_state
 {
   STATE_RUNNING,
   STATE_READY,
@@ -35,12 +35,12 @@ typedef enum task_state_e
   STATE_CHANNEL_RPLY,
   STATE_ZOMBIE,
   STATE_WAIT
-} task_state_t;
+};
 
 // The is the context that will be saved and restored during context
 // switches. The stack grows towards 0 which is why the registers
 // saved by hardware appear in reverse order.
-typedef struct context_s
+struct context
 {
   // The following registers are saved by software.
   uint32_t R8;
@@ -61,14 +61,14 @@ typedef struct context_s
   uint32_t LR;
   uint32_t PC;
   xPSR_Type xPSR;
-} context_t;
+};
 
-typedef struct task_s
+struct task
 {
   uint32_t id;
   uint32_t stackPointer;
   void * stack;
-  task_state_t state;
+  enum task_state state;
 
   // The provisioned and real priorities. The real priority is updated
   // via priority inheritence when other tasks block/unblock on this task.
@@ -113,29 +113,29 @@ typedef struct task_s
     // The task we're waiting on and the result it returned.
     struct
     {
-      struct task_s ** wait;
+      struct task ** wait;
       void * waitResult;
     };
   };
-} task_t;
+};
 
 // A task has (un)blocked on this task. This will add/remove the task to the list
 // of blocked tasks and will return true if the tasks priority has changed.
-bool task_add_blocked(task_t * task, task_t * blocked);
-bool task_remove_blocked(task_t * task, task_t * unblocked);
+bool task_add_blocked(struct task * task, struct task * blocked);
+bool task_remove_blocked(struct task * task, struct task * unblocked);
 
 // Notifies <task> that the priority of <blocked> has changed.
-bool task_update_blocked(task_t * task, task_t * blocked);
+bool task_update_blocked(struct task * task, struct task * blocked);
 
 // Reschedule a task. A task needs to be rescheduled after its priority
 // has changed. This should be called whenever task_add_blocked(),
 // task_remove_blocked() or task_update_blocked() returns true.
-void task_reschedule(task_t * task);
+void task_reschedule(struct task * task);
 
 // Destroy a task. Release all allocated resources.
-void task_destroy(task_t * task);
+void task_destroy(struct task * task);
 
 // Perform a sanity check on the task.
-bool task_check(task_t * task);
+bool task_check(struct task * task);
 
 #endif

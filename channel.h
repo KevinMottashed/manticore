@@ -28,9 +28,9 @@ typedef struct channel_s
   // The list of tasks that have sent messages.
   struct list_head waiting_tasks;
 
-  struct task_s * receive; // The task waiting for a message.
-  struct task_s * reply; // The task waiting for a reply.
-  struct task_s * server; // The task currently handing a message.
+  struct task * receive; // The task waiting for a message.
+  struct task * reply; // The task waiting for a reply.
+  struct task * server; // The task currently handing a message.
 } channel_t;
 
 #endif

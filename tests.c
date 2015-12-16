@@ -37,6 +37,7 @@ static void test_mutex_trylock(void);
 // ARM requires 8 byte alignment for the stack.
 #pragma data_alignment = 8
 static uint8_t stacks[NUM_TASKS][STACK_SIZE];
+static struct task tasks[NUM_TASKS];
 
 void test_run_all(void)
 {
@@ -51,8 +52,8 @@ void test_run_all(void)
 
 void test_context_switching(void)
 {
-  task_create(Task_Busy_Yield, NULL, stacks[0], STACK_SIZE, 10);
-  task_create(Task_Busy_Yield, NULL, stacks[1], STACK_SIZE, 10);
+  task_init(&tasks[0], Task_Busy_Yield, NULL, stacks[0], STACK_SIZE, 10);
+  task_init(&tasks[1], Task_Busy_Yield, NULL, stacks[1], STACK_SIZE, 10);
   task_wait(NULL);
   task_wait(NULL);
 }
@@ -68,7 +69,7 @@ void test_get_priority(void)
 {
   for (uint8_t priority = 1; priority < 100; ++priority)
   {
-    task_create(task_test_get_priority, (void*)priority, stacks[0], STACK_SIZE, priority);
+    task_init(&tasks[0], task_test_get_priority, (void*)priority, stacks[0], STACK_SIZE, priority);
     task_wait(NULL);
   }
 }
@@ -84,16 +85,15 @@ void test_sleep(void)
 {
   // Create tasks that sleep. Make sure they terminate in the right order.
   // Only use 3 tasks for this test so that it doesn't take longer than 3 seconds.
-  struct task * tasks[3];
   for (int32_t i = 0; i < 3; ++i)
   {
-    tasks[i] = task_create(task_test_sleep, (void*)i, stacks[i], STACK_SIZE, 5);
+    task_init(&tasks[i], task_test_sleep, (void*)i, stacks[i], STACK_SIZE, 5);
   }
   for (int32_t i = 0; i < 3; ++i)
   {
     struct task * ret = NULL;
     task_wait(&ret);
-    assert(ret == tasks[i]);
+    assert(ret == &tasks[i]);
   }
 }
 
@@ -107,16 +107,15 @@ __task void * task_test_delay(void * arg)
 void test_delay(void)
 {
   // Create tasks that sleep. Make sure they terminate in the right order.
-  struct task * tasks[NUM_TASKS];
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
-    tasks[i] = task_create(task_test_delay, (void*)(i * 10), stacks[i], STACK_SIZE, 5);
+    task_init(&tasks[i], task_test_delay, (void*)(i * 10), stacks[i], STACK_SIZE, 5);
   }
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
     struct task * ret = NULL;
     task_wait(&ret);
-    assert(ret == tasks[i]);
+    assert(ret == &tasks[i]);
   }
 }
 
@@ -139,17 +138,16 @@ __task void * task_test_yield(void * arg)
 
 void test_yield(void)
 {
-  struct task * tasks[NUM_TASKS];
   int32_t value = 0;
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
-    tasks[i] = task_create(task_test_yield, &value, stacks[i], STACK_SIZE, 5);
+    task_init(&tasks[i], task_test_yield, &value, stacks[i], STACK_SIZE, 5);
   }
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
     struct task * ret = NULL;
     task_wait(&ret);
-    assert(ret == tasks[i]);
+    assert(ret == &tasks[i]);
   }
 }
 
@@ -178,19 +176,18 @@ static __task void * task_test_mutex_lock(void * arg)
 
 static void test_mutex_lock(void)
 {
-  struct task * tasks[NUM_TASKS];
   struct test_mutex_data data;
   mutex_init(&data.mutex);
   data.critical_section = false;
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
-    tasks[i] = task_create(task_test_mutex_lock, &data, stacks[i], STACK_SIZE, 5);
+    task_init(&tasks[i], task_test_mutex_lock, &data, stacks[i], STACK_SIZE, 5);
   }
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
     struct task * ret = NULL;
     task_wait(&ret);
-    assert(ret == tasks[i]);
+    assert(ret == &tasks[i]);
   }
 }
 
@@ -221,7 +218,7 @@ static void test_mutex_trylock(void)
   data.critical_section = false;
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
-    task_create(task_test_mutex_trylock, &data, stacks[i], STACK_SIZE, 5);
+    task_init(&tasks[i], task_test_mutex_trylock, &data, stacks[i], STACK_SIZE, 5);
   }
 
   // In this test the tasks aren't guaranteed to terminate in the same order.

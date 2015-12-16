@@ -38,8 +38,7 @@ enum task_state
 };
 
 // The is the context that will be saved and restored during context
-// switches. The stack grows towards 0 which is why the registers
-// saved by hardware appear in reverse order.
+// switches. The stack grows towards 0.
 struct context
 {
   // The following registers are saved by software.

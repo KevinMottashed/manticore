@@ -202,12 +202,13 @@ __task void * task_led_server(void * arg)
 __task void * task_parent(void * arg)
 {
   void * stack = heap_malloc(128);
+  struct task * child = heap_malloc(sizeof(*child));
   while (true)
   {
     for (int i = 0; i < 100; ++i)
     {
       // Test creating a task and wait for it to finish.
-      struct task * child = task_create(&task_child, (void*)i, stack, 128, task_get_priority(NULL) - 1);
+      task_init(child, task_child, (void*)i, stack, 128, task_get_priority(NULL) - 1);
       int result = (int)task_wait(&child);
       assert(result == i);
     }
@@ -248,10 +249,10 @@ int main()
   //
   // Create all the tasks.
   //
-
-  //           Entry                Argument   Stack      Stack Size  Priority
-  task_create(task_run_all_tests,   NULL,      stack,     STACK_SIZE, 10);
+  struct task task;
+  task_init(&task, task_run_all_tests, NULL, stack, STACK_SIZE, 10);
 #if 0
+  //           Entry                Argument   Stack      Stack Size  Priority
   task_create(&Task_Busy_Yield,     NULL,      stacks[0], STACK_SIZE, 10);
   task_create(&task_mutex_try_lock, NULL,      stacks[1], STACK_SIZE, 10);
   task_create(&task_led3,           (void*)33, stacks[2], STACK_SIZE, 15);

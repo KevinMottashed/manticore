@@ -72,6 +72,8 @@ uint8_t idle_task_stack[128];
 #pragma data_alignment = 8
 uint8_t init_task_stack[128];
 
+static struct task idle_task;
+static struct task init_task;
 static __task void * kernel_task_idle(void * arg);
 static __task void * kernel_task_init(void * arg);
 
@@ -82,13 +84,13 @@ void manticore_init(void)
   list_init(&sleeping_tasks);
 
   // Create the init task and set it as the initial running task.
-  struct task * init = task_create(kernel_task_init, NULL, init_task_stack, sizeof(init_task_stack), 1);
-  init->state = STATE_RUNNING;
-  runningTask = init;
-  list_remove(&init->wait_node);
+  task_init(&init_task, kernel_task_init, NULL, init_task_stack, sizeof(init_task_stack), 1);
+  init_task.state = STATE_RUNNING;
+  runningTask = &init_task;
+  list_remove(&init_task.wait_node);
 
   // Create the idle task.
-  struct task * idle = task_create(kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
+  task_init(&idle_task, kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
 }
 
 void manticore_main(void)

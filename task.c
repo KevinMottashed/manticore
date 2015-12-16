@@ -13,7 +13,7 @@
 
 static void task_return(void * result);
 
-struct task * task_create(task_entry_t entry, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
+void task_init(struct task * task, task_entry_t entry, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
 {
   assert(stack != NULL);
   assert(stackSize >= sizeof(struct context));
@@ -24,11 +24,8 @@ struct task * task_create(task_entry_t entry, void * arg, void * stack, uint32_t
     kernel_scheduler_disable();
   }
 
-  struct task * task = heap_malloc(sizeof(*task));
-  assert(task != NULL);
-
-  static uint8_t taskIdCounter = 0;
-  task->id = taskIdCounter++;
+  static uint8_t task_id_counter = 0;
+  task->id = task_id_counter++;
   task->state = STATE_READY;
   task->provisionedPriority = priority;
   task->priority = priority;
@@ -48,7 +45,7 @@ struct task * task_create(task_entry_t entry, void * arg, void * stack, uint32_t
   struct context * context = (struct context*)task->stackPointer;
   memset(context, 0, sizeof(*context)); // Most registers will start off as zero.
   context->R0 = (uint32_t)arg;
-  context->LR = (uint32_t)&task_return;
+  context->LR = (uint32_t)task_return;
   context->PC = (uint32_t)entry; // The program counter starts at the task entry point.
   context->xPSR.b.T = 1; // Enable Thumb mode.
 
@@ -67,8 +64,6 @@ struct task * task_create(task_entry_t entry, void * arg, void * stack, uint32_t
       kernel_scheduler_enable();
     }
   }
-
-  return task;
 }
 
 void * task_wait(struct task ** task)

@@ -45,7 +45,7 @@ void manticore_main(void);
 typedef void * (__task * task_entry_t)(void *);
 
 /**
- * Create a new task.
+ * Initialize a new task.
  * @param entry The entry point for the new task.
  * @param arg The argument passed to the new task.
  * @param stack The memory used for the stack.
@@ -53,11 +53,12 @@ typedef void * (__task * task_entry_t)(void *);
  * @param priority The priority of the new task.
  * @return A handle to the newly created task.
  */
-struct task * task_create(task_entry_t entry,
-                          void * arg,
-                          void * stack,
-                          uint32_t stackSize,
-                          uint8_t priority);
+void task_init(struct task * task,
+               task_entry_t entry,
+               void * arg,
+               void * stack,
+               uint32_t stackSize,
+               uint8_t priority);
 
 /**
  * Wait for a task to return.

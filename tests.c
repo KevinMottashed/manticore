@@ -19,15 +19,19 @@ static __task void * task_test_get_priority(void * arg);
 static __task void * task_test_sleep(void * arg);
 static __task void * task_test_delay(void * arg);
 static __task void * task_test_yield(void * arg);
+static __task void * task_test_mutex_lock(void * arg);
+static __task void * task_test_mutex_trylock(void * arg);
 
 static void test_context_switching(void);
 static void test_get_priority(void);
 static void test_sleep(void);
 static void test_delay(void);
 static void test_yield(void);
+static void test_mutex_lock(void);
+static void test_mutex_trylock(void);
 
 // 128 bytes of stack should be enough for these dummy tasks.
-#define NUM_TASKS (3)
+#define NUM_TASKS (8)
 #define STACK_SIZE (128)
 
 // ARM requires 8 byte alignment for the stack.
@@ -41,6 +45,8 @@ void test_run_all(void)
   test_sleep();
   test_delay();
   test_yield();
+  test_mutex_lock();
+  test_mutex_trylock();
 }
 
 void test_context_switching(void)
@@ -76,15 +82,19 @@ __task void * task_test_sleep(void * arg)
 
 void test_sleep(void)
 {
-  // Create 2 tasks that sleep. Make sure they terminate in the right order.
-  task_handle_t t1 = task_create(task_test_sleep, (void*)1, stacks[0], STACK_SIZE, 10);
-  task_handle_t t2 = task_create(task_test_sleep, (void*)2, stacks[1], STACK_SIZE, 10);
-  task_handle_t ret1 = NULL;
-  task_handle_t ret2 = NULL;
-  task_wait(&ret1);
-  task_wait(&ret2);
-  assert(ret1 == t1);
-  assert(ret2 == t2);
+  // Create tasks that sleep. Make sure they terminate in the right order.
+  // Only use 3 tasks for this test so that it doesn't take longer than 3 seconds.
+  task_handle_t tasks[3];
+  for (int32_t i = 0; i < 3; ++i)
+  {
+    tasks[i] = task_create(task_test_sleep, (void*)i, stacks[i], STACK_SIZE, 5);
+  }
+  for (int32_t i = 0; i < 3; ++i)
+  {
+    task_handle_t ret = NULL;
+    task_wait(&ret);
+    assert(ret == tasks[i]);
+  }
 }
 
 __task void * task_test_delay(void * arg)
@@ -96,39 +106,129 @@ __task void * task_test_delay(void * arg)
 
 void test_delay(void)
 {
-  // Create 2 tasks that sleep. Make sure they terminate in the right order.
-  task_handle_t t1 = task_create(task_test_delay, (void*)10, stacks[0], STACK_SIZE, 10);
-  task_handle_t t2 = task_create(task_test_delay, (void*)20, stacks[1], STACK_SIZE, 10);
-  task_handle_t ret1 = NULL;
-  task_handle_t ret2 = NULL;
-  task_wait(&ret1);
-  task_wait(&ret2);
-  assert(ret1 == t1);
-  assert(ret2 == t2);
+  // Create tasks that sleep. Make sure they terminate in the right order.
+  task_handle_t tasks[NUM_TASKS];
+  for (int32_t i = 0; i < NUM_TASKS; ++i)
+  {
+    tasks[i] = task_create(task_test_delay, (void*)(i * 10), stacks[i], STACK_SIZE, 5);
+  }
+  for (int32_t i = 0; i < NUM_TASKS; ++i)
+  {
+    task_handle_t ret = NULL;
+    task_wait(&ret);
+    assert(ret == tasks[i]);
+  }
 }
 
 __task void * task_test_yield(void * arg)
 {
-  // This test works by having 2 tasks running this function.
-  // Each task flips the boolean and yields to the other one.
-  // Each task should see the bool return to its original value after yielding.
-  volatile bool * value = (volatile bool*)arg;
+  // This test works by having multiple tasks running this function.
+  // Each task increments the number and yields to the other ones.
+  // Each task should see the number incremented by all the other tasks.
+  volatile int32_t * value = (volatile int32_t *)arg;
   for (int32_t i = 0; i < 1000; ++i)
   {
-    bool prev_value = *value;
-    *value = !*value;
+    int32_t prev_value = *value;
+    *value += 1;
     task_yield();
-    assert(*value == prev_value);
+    assert(*value == prev_value + NUM_TASKS);
   }
-  *value = !*value;
+  *value += 1;
   return NULL;
 }
 
 void test_yield(void)
 {
-  bool value = true;
-  task_handle_t t1 = task_create(task_test_yield, &value, stacks[0], STACK_SIZE, 10);
-  task_handle_t t2 = task_create(task_test_yield, &value, stacks[1], STACK_SIZE, 10);
-  task_wait(NULL);
-  task_wait(NULL);
+  task_handle_t tasks[NUM_TASKS];
+  int32_t value = 0;
+  for (int32_t i = 0; i < NUM_TASKS; ++i)
+  {
+    tasks[i] = task_create(task_test_yield, &value, stacks[i], STACK_SIZE, 5);
+  }
+  for (int32_t i = 0; i < NUM_TASKS; ++i)
+  {
+    task_handle_t ret = NULL;
+    task_wait(&ret);
+    assert(ret == tasks[i]);
+  }
+}
+
+struct test_mutex_data
+{
+  struct mutex mutex;
+  volatile bool critical_section;
+};
+
+static __task void * task_test_mutex_lock(void * arg)
+{
+  struct test_mutex_data * data = (struct test_mutex_data *)arg;
+  for (int32_t i = 0; i < 10; ++i)
+  {
+    mutex_lock(&data->mutex);
+    assert(!data->critical_section);
+    data->critical_section = true;
+    task_yield();
+    task_delay(20);
+    assert(data->critical_section);
+    data->critical_section = false;
+    mutex_unlock(&data->mutex);
+  }
+  return NULL;
+}
+
+static void test_mutex_lock(void)
+{
+  task_handle_t tasks[NUM_TASKS];
+  struct test_mutex_data data;
+  mutex_init(&data.mutex);
+  data.critical_section = false;
+  for (int32_t i = 0; i < NUM_TASKS; ++i)
+  {
+    tasks[i] = task_create(task_test_mutex_lock, &data, stacks[i], STACK_SIZE, 5);
+  }
+  for (int32_t i = 0; i < NUM_TASKS; ++i)
+  {
+    task_handle_t ret = NULL;
+    task_wait(&ret);
+    assert(ret == tasks[i]);
+  }
+}
+
+static __task void * task_test_mutex_trylock(void * arg)
+{
+  struct test_mutex_data * data = (struct test_mutex_data *)arg;
+  for (int32_t i = 0; i < 10; ++i)
+  {
+    if (!mutex_trylock(&data->mutex))
+    {
+      continue;
+    }
+    assert(!data->critical_section);
+    data->critical_section = true;
+    task_yield();
+    task_delay(20);
+    assert(data->critical_section);
+    data->critical_section = false;
+    mutex_unlock(&data->mutex);
+  }
+  return NULL;
+}
+
+static void test_mutex_trylock(void)
+{
+  struct test_mutex_data data;
+  mutex_init(&data.mutex);
+  data.critical_section = false;
+  for (int32_t i = 0; i < NUM_TASKS; ++i)
+  {
+    task_create(task_test_mutex_trylock, &data, stacks[i], STACK_SIZE, 5);
+  }
+
+  // In this test the tasks aren't guaranteed to terminate in the same order.
+  // The tasks waiting for the mutex spin instead of queuing up.
+  // The first task that didn't waste its time slice spinning will get the mutex.
+  for (int32_t i = 0; i < NUM_TASKS; ++i)
+  {
+    task_wait(NULL);
+  }
 }

@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef struct mutex_s
+struct mutex
 {
   uint8_t id; // Unique identifier for this mutex.
   bool locked;
@@ -26,6 +26,6 @@ typedef struct mutex_s
 
   // The list of tasks waiting for this mutex.
   struct list_head waiting_tasks;
-} mutex_t;
+};
 
 #endif

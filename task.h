@@ -94,7 +94,7 @@ typedef struct task_s
     unsigned int sleep;
 
     // The mutex we're waiting on.
-    struct mutex_s * mutex;
+    struct mutex * mutex;
 
     struct channel_context_s
     {

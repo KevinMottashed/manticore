@@ -299,7 +299,7 @@ void kernel_handle_sleep(void)
 
 void kernel_handle_mutex_lock(void)
 {
-  mutex_t * mutex = runningTask->mutex;
+  struct mutex * mutex = runningTask->mutex;
   assert(mutex != NULL);
 
   // Add the active task to the queue of tasks waiting for the mutex.
@@ -317,7 +317,7 @@ void kernel_handle_mutex_lock(void)
 
 void kernel_handle_mutex_unlock(void)
 {
-  mutex_t * mutex = runningTask->mutex;
+  struct mutex * mutex = runningTask->mutex;
   assert(mutex != NULL);
 
   // Unblock the next highest priority task waiting for this mutex.

@@ -39,7 +39,7 @@ static __task void * task_child(void * arg);
 #pragma data_alignment = 8
 static uint8_t stack[STACK_SIZE];
 
-static mutex_handle_t mutex;
+static struct mutex mutex;
 static channel_handle_t ledChannel;
 
 // The message format used to communicate with the LED task.
@@ -61,14 +61,14 @@ __task void * task_mutex_try_lock(void * arg)
   {
     for (int i = 0x10000; i < 0x20000; ++i)
     {
-      if (mutex_trylock(mutex))
+      if (mutex_trylock(&mutex))
       {
-        mutex_unlock(mutex);
+        mutex_unlock(&mutex);
       }
       else
       {
-        mutex_lock(mutex);
-        mutex_unlock(mutex);
+        mutex_lock(&mutex);
+        mutex_unlock(&mutex);
       }
     }
   }
@@ -126,9 +126,9 @@ __task void * task_mutex_lock(void * arg)
   // This task locks and unlocks a mutex.
   while (true)
   {
-    mutex_lock(mutex);
+    mutex_lock(&mutex);
     task_delay(50);
-    mutex_unlock(mutex);
+    mutex_unlock(&mutex);
     task_delay(50);
   }
 }
@@ -138,13 +138,13 @@ __task void * task_mutex_lock2(void * arg)
   // This task locks and unlocks a mutex.
   while (true)
   {
-    mutex_lock(mutex);
+    mutex_lock(&mutex);
     task_delay(200);
 
     // task_mutex_lock() should be blocked on us
     assert(task_get_priority(NULL) == 12);
 
-    mutex_unlock(mutex);
+    mutex_unlock(&mutex);
 
     // We should be back to our original priority.
     assert(task_get_priority(NULL) == 10);
@@ -242,7 +242,7 @@ int main()
   manticore_init();
 
   // Create some synchronization mechanisms.
-  mutex = mutex_create();
+  mutex_init(&mutex);
   ledChannel = channel_create();
 
   //

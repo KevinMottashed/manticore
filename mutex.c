@@ -21,21 +21,16 @@
 
 #include <assert.h>
 
-mutex_handle_t mutex_create(void)
+void mutex_init(struct mutex * mutex)
 {
-  static uint8_t mutexIdCounter = 0;
-
-  mutex_t * mutex = heap_malloc(sizeof(*mutex));
-  assert(mutex != NULL);
-
-  mutex->id = mutexIdCounter++;
+  static uint8_t mutex_id_counter = 0;
+  mutex->id = mutex_id_counter++;
   mutex->owner = NULL;
   mutex->locked = false;
   list_init(&mutex->waiting_tasks);
-  return mutex;
 }
 
-void mutex_lock(mutex_t * mutex)
+void mutex_lock(struct mutex * mutex)
 {
   kernel_scheduler_disable();
 
@@ -54,7 +49,7 @@ void mutex_lock(mutex_t * mutex)
   }
 }
 
-bool mutex_trylock(mutex_t * mutex)
+bool mutex_trylock(struct mutex * mutex)
 {
   kernel_scheduler_disable();
   if (mutex->locked)
@@ -71,7 +66,7 @@ bool mutex_trylock(mutex_t * mutex)
   }
 }
 
-void mutex_unlock(mutex_t * mutex)
+void mutex_unlock(struct mutex * mutex)
 {
   kernel_scheduler_disable();
   if (!list_empty(&mutex->waiting_tasks))

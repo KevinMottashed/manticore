@@ -11,6 +11,8 @@
 #ifndef MANTICORE_H
 #define MANTICORE_H
 
+#include "mutex.h"
+
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
@@ -100,21 +102,18 @@ void task_yield(void);
 // Mutex
 // --------------------------------------
 
-// Handle for mutexes.
-typedef struct mutex_s * mutex_handle_t;
-
 /**
- * Create a new mutex.
- * @return A handle to the newly created mutex.
+ * Initialize a new mutex.
+ * @param mutex The mutex to initialize.
  */
-mutex_handle_t mutex_create(void);
+void mutex_init(struct mutex * mutex);
 
 /**
  * Lock a mutex.
  * This call will block if the mutex is already locked.
  * @param mutex The mutex to lock.
  */
-void mutex_lock(mutex_handle_t mutex);
+void mutex_lock(struct mutex * mutex);
 
 /**
  * Try to lock a mutex.
@@ -122,13 +121,13 @@ void mutex_lock(mutex_handle_t mutex);
  * @param mutex The mutex to lock.
  * @return True if the mutex was lock.
  */
-bool mutex_trylock(mutex_handle_t mutex);
+bool mutex_trylock(struct mutex * mutex);
 
 /**
  * Unlock a mutex.
  * @param mutex The mutex to unlock.
  */
-void mutex_unlock(mutex_handle_t mutex);
+void mutex_unlock(struct mutex * mutex);
 
 // --------------------------------------
 // Channel

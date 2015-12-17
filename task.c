@@ -225,6 +225,7 @@ void task_destroy(struct task * task)
 
   // Remove the task from the family tree.
   tree_remove(&task->family);
+  task->state = STATE_DEAD;
 }
 
 void task_return(void * result)

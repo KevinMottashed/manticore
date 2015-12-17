@@ -99,6 +99,7 @@ void test_sleep(void)
     struct task * ret = NULL;
     task_wait(&ret);
     assert(ret == &tasks[i]);
+    assert(ret->state == STATE_DEAD);
   }
 }
 
@@ -121,6 +122,7 @@ void test_delay(void)
     struct task * ret = NULL;
     task_wait(&ret);
     assert(ret == &tasks[i]);
+    assert(ret->state == STATE_DEAD);
   }
 }
 
@@ -153,6 +155,7 @@ void test_yield(void)
     struct task * ret = NULL;
     task_wait(&ret);
     assert(ret == &tasks[i]);
+    assert(ret->state == STATE_DEAD);
   }
 }
 
@@ -193,6 +196,7 @@ static void test_mutex_lock(void)
     struct task * ret = NULL;
     task_wait(&ret);
     assert(ret == &tasks[i]);
+    assert(ret->state == STATE_DEAD);
   }
 }
 
@@ -359,6 +363,9 @@ static void test_mutex_priority(void)
   // delay here so that the we don't influence any priorities by blocking
   task_delay(50);
   task_wait(&data.high);
+  assert(data.high->state == STATE_DEAD);
   task_wait(&data.med);
+  assert(data.med->state == STATE_DEAD);
   task_wait(&data.low);
+  assert(data.low->state == STATE_DEAD);
 }

@@ -34,7 +34,8 @@ enum task_state
   STATE_CHANNEL_RECV,
   STATE_CHANNEL_RPLY,
   STATE_ZOMBIE,
-  STATE_WAIT
+  STATE_WAIT,
+  STATE_DEAD
 };
 
 // The is the context that will be saved and restored during context

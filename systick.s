@@ -40,6 +40,7 @@ SysTick_Handler:
   ; and then let the kernel take over. Clear the COUNTFLAG field.
   BL SaveContext
   BL ClearSysTick
-  B RestoreKernel
+  LDR R0, =RestoreKernel
+  BX R0
 
   END

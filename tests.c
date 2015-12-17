@@ -21,6 +21,9 @@ static __task void * task_test_delay(void * arg);
 static __task void * task_test_yield(void * arg);
 static __task void * task_test_mutex_lock(void * arg);
 static __task void * task_test_mutex_trylock(void * arg);
+static __task void * task_test_mutex_priority_high(void * arg);
+static __task void * task_test_mutex_priority_med(void * arg);
+static __task void * task_test_mutex_priority_low(void * arg);
 
 static void test_context_switching(void);
 static void test_get_priority(void);
@@ -29,6 +32,7 @@ static void test_delay(void);
 static void test_yield(void);
 static void test_mutex_lock(void);
 static void test_mutex_trylock(void);
+static void test_mutex_priority(void);
 
 // 128 bytes of stack should be enough for these dummy tasks.
 #define NUM_TASKS (8)
@@ -48,6 +52,7 @@ void test_run_all(void)
   test_yield();
   test_mutex_lock();
   test_mutex_trylock();
+  test_mutex_priority();
 }
 
 void test_context_switching(void)
@@ -228,4 +233,132 @@ static void test_mutex_trylock(void)
   {
     task_wait(NULL);
   }
+}
+
+struct test_mutex_priority_data
+{
+  struct task * high;
+  struct task * med;
+  struct task * low;
+  struct mutex mutex;
+};
+
+static __task void * task_test_mutex_priority_high(void * arg)
+{
+  struct test_mutex_priority_data * data = (struct test_mutex_priority_data *)arg;
+
+  assert(data->low->state == STATE_READY);
+  assert(data->med->state == STATE_READY);
+  assert(data->low->priority == data->low->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  task_delay(20);
+  mutex_lock(&data->mutex);
+
+  assert(data->low->state == STATE_READY);
+  assert(data->med->state == STATE_MUTEX);
+  assert(data->low->priority == data->low->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  mutex_unlock(&data->mutex);
+
+  assert(data->low->state == STATE_READY);
+  assert(data->med->state == STATE_READY);
+  assert(data->low->priority == data->low->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  return NULL;
+}
+
+static __task void * task_test_mutex_priority_med(void * arg)
+{
+  struct test_mutex_priority_data * data = (struct test_mutex_priority_data *)arg;
+
+  assert(data->low->state == STATE_READY);
+  assert(data->high->state == STATE_SLEEP);
+  assert(data->low->priority == data->low->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  task_delay(10);
+  mutex_lock(&data->mutex);
+
+  assert(data->low->state == STATE_READY);
+  assert(data->high->state == STATE_ZOMBIE);
+  assert(data->low->priority == data->low->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  mutex_unlock(&data->mutex);
+
+  assert(data->low->state == STATE_READY);
+  assert(data->high->state == STATE_ZOMBIE);
+  assert(data->low->priority == data->low->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+
+  return NULL;
+}
+
+static __task void * task_test_mutex_priority_low(void * arg)
+{
+  struct test_mutex_priority_data * data = (struct test_mutex_priority_data *)arg;
+
+  assert(data->med->state == STATE_SLEEP);
+  assert(data->high->state == STATE_SLEEP);
+  assert(data->low->priority == data->low->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  mutex_lock(&data->mutex);
+
+  assert(data->med->state == STATE_SLEEP);
+  assert(data->high->state == STATE_SLEEP);
+  assert(data->low->priority == data->low->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  task_delay(15);
+
+  assert(data->med->state == STATE_MUTEX);
+  assert(data->high->state == STATE_SLEEP);
+  assert(data->low->priority == data->med->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  task_delay(10);
+
+  assert(data->med->state == STATE_MUTEX);
+  assert(data->high->state == STATE_MUTEX);
+  assert(data->low->priority == data->high->provisioned_priority);
+  assert(data->med->priority == data->med->provisioned_priority);
+  assert(data->high->priority == data->high->provisioned_priority);
+
+  mutex_unlock(&data->mutex);
+
+  assert(data->med->state == STATE_ZOMBIE);
+  assert(data->high->state == STATE_ZOMBIE);
+  assert(data->low->priority == data->low->provisioned_priority);
+
+  return NULL;
+}
+
+static void test_mutex_priority(void)
+{
+  struct test_mutex_priority_data data = {
+    .high = &tasks[0],
+    .med = &tasks[1],
+    .low = &tasks[2]
+  };
+  mutex_init(&data.mutex);
+  task_init(&tasks[0], task_test_mutex_priority_high, &data, stacks[0], STACK_SIZE, 6);
+  task_init(&tasks[1], task_test_mutex_priority_med, &data, stacks[1], STACK_SIZE, 5);
+  task_init(&tasks[2], task_test_mutex_priority_low, &data, stacks[2], STACK_SIZE, 4);
+  // delay here so that the we don't influence any priorities by blocking
+  task_delay(50);
+  task_wait(&data.high);
+  task_wait(&data.med);
+  task_wait(&data.low);
 }

@@ -230,7 +230,13 @@ __task void * task_run_all_tests(void * arg)
 {
   test_run_all();
   gpio_led3_on();
-  return NULL;
+  while (true)
+  {
+    test_run_all();
+    gpio_led4_on();
+    test_run_all();
+    gpio_led4_off();
+  }
 }
 
 int main()

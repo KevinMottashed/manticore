@@ -68,9 +68,9 @@ static void kernel_handle_task_wait(void);
 
 // Internal OS tasks
 #pragma data_alignment = 8
-uint8_t idle_task_stack[128];
+static uint8_t idle_task_stack[128];
 #pragma data_alignment = 8
-uint8_t init_task_stack[128];
+static uint8_t init_task_stack[128];
 
 static struct task idle_task;
 static struct task init_task;

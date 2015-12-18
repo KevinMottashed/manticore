@@ -11,8 +11,23 @@
 #include "tests.h"
 
 #include "manticore.h"
+#include "utils.h"
 
 #include <assert.h>
+
+// We need an assert macro that's compiled in release mode for unit testing.
+// It would be nice to have a real unit testing framework but the code size
+// is too much and there's no serial port to print results. The debugger
+// automatically stops on failure in release mode. In debug mode, we get
+// the usual IAR assert failure behavior with the popup.
+#ifdef NDEBUG
+#define ut_assert(x)\
+  if (!(x)) {\
+    BREAKPOINT;\
+  }
+#else
+#define ut_assert assert
+#endif
 
 extern __task void * Task_Busy_Yield(void * arg);
 static __task void * task_test_get_priority(void * arg);
@@ -66,7 +81,7 @@ void test_context_switching(void)
 __task void * task_test_get_priority(void * arg)
 {
   uint8_t priority = (uint32_t)arg;
-  assert(priority == task_get_priority(NULL));
+  ut_assert(priority == task_get_priority(NULL));
   return NULL;
 }
 
@@ -98,8 +113,8 @@ void test_sleep(void)
   {
     struct task * ret = NULL;
     task_wait(&ret);
-    assert(ret == &tasks[i]);
-    assert(ret->state == STATE_DEAD);
+    ut_assert(ret == &tasks[i]);
+    ut_assert(ret->state == STATE_DEAD);
   }
 }
 
@@ -121,8 +136,8 @@ void test_delay(void)
   {
     struct task * ret = NULL;
     task_wait(&ret);
-    assert(ret == &tasks[i]);
-    assert(ret->state == STATE_DEAD);
+    ut_assert(ret == &tasks[i]);
+    ut_assert(ret->state == STATE_DEAD);
   }
 }
 
@@ -137,7 +152,7 @@ __task void * task_test_yield(void * arg)
     int32_t prev_value = *value;
     *value += 1;
     task_yield();
-    assert(*value == prev_value + NUM_TASKS);
+    ut_assert(*value == prev_value + NUM_TASKS);
   }
   *value += 1;
   return NULL;
@@ -154,8 +169,8 @@ void test_yield(void)
   {
     struct task * ret = NULL;
     task_wait(&ret);
-    assert(ret == &tasks[i]);
-    assert(ret->state == STATE_DEAD);
+    ut_assert(ret == &tasks[i]);
+    ut_assert(ret->state == STATE_DEAD);
   }
 }
 
@@ -171,11 +186,11 @@ static __task void * task_test_mutex_lock(void * arg)
   for (int32_t i = 0; i < 10; ++i)
   {
     mutex_lock(&data->mutex);
-    assert(!data->critical_section);
+    ut_assert(!data->critical_section);
     data->critical_section = true;
     task_yield();
     task_delay(20);
-    assert(data->critical_section);
+    ut_assert(data->critical_section);
     data->critical_section = false;
     mutex_unlock(&data->mutex);
   }
@@ -195,8 +210,8 @@ static void test_mutex_lock(void)
   {
     struct task * ret = NULL;
     task_wait(&ret);
-    assert(ret == &tasks[i]);
-    assert(ret->state == STATE_DEAD);
+    ut_assert(ret == &tasks[i]);
+    ut_assert(ret->state == STATE_DEAD);
   }
 }
 
@@ -209,11 +224,11 @@ static __task void * task_test_mutex_trylock(void * arg)
     {
       continue;
     }
-    assert(!data->critical_section);
+    ut_assert(!data->critical_section);
     data->critical_section = true;
     task_yield();
     task_delay(20);
-    assert(data->critical_section);
+    ut_assert(data->critical_section);
     data->critical_section = false;
     mutex_unlock(&data->mutex);
   }
@@ -251,28 +266,28 @@ static __task void * task_test_mutex_priority_high(void * arg)
 {
   struct test_mutex_priority_data * data = (struct test_mutex_priority_data *)arg;
 
-  assert(data->low->state == STATE_READY);
-  assert(data->med->state == STATE_READY);
-  assert(data->low->priority == data->low->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->low->state == STATE_READY);
+  ut_assert(data->med->state == STATE_READY);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   task_delay(20);
   mutex_lock(&data->mutex);
 
-  assert(data->low->state == STATE_READY);
-  assert(data->med->state == STATE_MUTEX);
-  assert(data->low->priority == data->low->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->low->state == STATE_READY);
+  ut_assert(data->med->state == STATE_MUTEX);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   mutex_unlock(&data->mutex);
 
-  assert(data->low->state == STATE_READY);
-  assert(data->med->state == STATE_READY);
-  assert(data->low->priority == data->low->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->low->state == STATE_READY);
+  ut_assert(data->med->state == STATE_READY);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   return NULL;
 }
@@ -281,27 +296,27 @@ static __task void * task_test_mutex_priority_med(void * arg)
 {
   struct test_mutex_priority_data * data = (struct test_mutex_priority_data *)arg;
 
-  assert(data->low->state == STATE_READY);
-  assert(data->high->state == STATE_SLEEP);
-  assert(data->low->priority == data->low->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->low->state == STATE_READY);
+  ut_assert(data->high->state == STATE_SLEEP);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   task_delay(10);
   mutex_lock(&data->mutex);
 
-  assert(data->low->state == STATE_READY);
-  assert(data->high->state == STATE_ZOMBIE);
-  assert(data->low->priority == data->low->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->low->state == STATE_READY);
+  ut_assert(data->high->state == STATE_ZOMBIE);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   mutex_unlock(&data->mutex);
 
-  assert(data->low->state == STATE_READY);
-  assert(data->high->state == STATE_ZOMBIE);
-  assert(data->low->priority == data->low->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->low->state == STATE_READY);
+  ut_assert(data->high->state == STATE_ZOMBIE);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
 
   return NULL;
 }
@@ -310,41 +325,41 @@ static __task void * task_test_mutex_priority_low(void * arg)
 {
   struct test_mutex_priority_data * data = (struct test_mutex_priority_data *)arg;
 
-  assert(data->med->state == STATE_SLEEP);
-  assert(data->high->state == STATE_SLEEP);
-  assert(data->low->priority == data->low->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->med->state == STATE_SLEEP);
+  ut_assert(data->high->state == STATE_SLEEP);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   mutex_lock(&data->mutex);
 
-  assert(data->med->state == STATE_SLEEP);
-  assert(data->high->state == STATE_SLEEP);
-  assert(data->low->priority == data->low->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->med->state == STATE_SLEEP);
+  ut_assert(data->high->state == STATE_SLEEP);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   task_delay(15);
 
-  assert(data->med->state == STATE_MUTEX);
-  assert(data->high->state == STATE_SLEEP);
-  assert(data->low->priority == data->med->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->med->state == STATE_MUTEX);
+  ut_assert(data->high->state == STATE_SLEEP);
+  ut_assert(data->low->priority == data->med->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   task_delay(10);
 
-  assert(data->med->state == STATE_MUTEX);
-  assert(data->high->state == STATE_MUTEX);
-  assert(data->low->priority == data->high->provisioned_priority);
-  assert(data->med->priority == data->med->provisioned_priority);
-  assert(data->high->priority == data->high->provisioned_priority);
+  ut_assert(data->med->state == STATE_MUTEX);
+  ut_assert(data->high->state == STATE_MUTEX);
+  ut_assert(data->low->priority == data->high->provisioned_priority);
+  ut_assert(data->med->priority == data->med->provisioned_priority);
+  ut_assert(data->high->priority == data->high->provisioned_priority);
 
   mutex_unlock(&data->mutex);
 
-  assert(data->med->state == STATE_ZOMBIE);
-  assert(data->high->state == STATE_ZOMBIE);
-  assert(data->low->priority == data->low->provisioned_priority);
+  ut_assert(data->med->state == STATE_ZOMBIE);
+  ut_assert(data->high->state == STATE_ZOMBIE);
+  ut_assert(data->low->priority == data->low->provisioned_priority);
 
   return NULL;
 }
@@ -362,10 +377,13 @@ static void test_mutex_priority(void)
   task_init(&tasks[2], task_test_mutex_priority_low, &data, stacks[2], STACK_SIZE, 4);
   // delay here so that the we don't influence any priorities by blocking
   task_delay(50);
+  ut_assert(data.high->state == STATE_ZOMBIE);
+  ut_assert(data.med->state == STATE_ZOMBIE);
+  ut_assert(data.low->state == STATE_ZOMBIE);
   task_wait(&data.high);
-  assert(data.high->state == STATE_DEAD);
+  ut_assert(data.high->state == STATE_DEAD);
   task_wait(&data.med);
-  assert(data.med->state == STATE_DEAD);
+  ut_assert(data.med->state == STATE_DEAD);
   task_wait(&data.low);
-  assert(data.low->state == STATE_DEAD);
+  ut_assert(data.low->state == STATE_DEAD);
 }

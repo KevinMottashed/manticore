@@ -177,7 +177,7 @@ Task_Busy_Yield:
   SVC #1 // yield()
   BVS fail
 
-  // Restore R4-R11 and LR
+  // Restore R4-R11 and return
   POP {R0-R3}
   MOV R8, R0
   MOV R9, R1

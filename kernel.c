@@ -306,7 +306,6 @@ void kernel_handle_mutex_lock(void)
 
   // Add the active task to the queue of tasks waiting for the mutex.
   running_task->state = STATE_MUTEX;
-  list_remove(&running_task->wait_node);
   list_push_back(&mutex->waiting_tasks, &running_task->wait_node);
 
   // The owner of the mutex is now blocking whoever tried to lock it.
@@ -323,11 +322,11 @@ void kernel_handle_mutex_unlock(void)
   assert(mutex != NULL);
 
   // Unblock the next highest priority task waiting for this mutex.
-  struct task * newOwner = get_next_task(&mutex->waiting_tasks);
-  assert(newOwner != NULL);
-  list_remove(&newOwner->wait_node);
-  newOwner->state = STATE_READY;
-  list_push_back(&ready_tasks, &newOwner->wait_node);
+  struct task * new_owner = get_next_task(&mutex->waiting_tasks);
+  assert(new_owner != NULL);
+  list_remove(&new_owner->wait_node);
+  new_owner->state = STATE_READY;
+  list_push_back(&ready_tasks, &new_owner->wait_node);
 
   // A task is still ready after unlocking a mutex.
   running_task->state = STATE_READY;
@@ -335,26 +334,26 @@ void kernel_handle_mutex_unlock(void)
 
   // The previous owner of the mutex is no longer blocking tasks waiting
   // for the mutex. The new owner of the mutex is now blocking all those tasks.
-  bool rescheduleOldOwner = false;
-  bool rescheduleNewOwner = false;
-  struct task * oldOwner = mutex->owner;
-  mutex->owner = newOwner;
-  rescheduleOldOwner = task_remove_blocked(oldOwner, newOwner);
+  bool reschedule_old_owner = false;
+  bool reschedule_new_owner = false;
+  struct task * old_owner = mutex->owner;
+  mutex->owner = new_owner;
+  reschedule_old_owner = task_remove_blocked(old_owner, new_owner);
 
   struct list_head * node;
   list_for_each(node, &mutex->waiting_tasks)
   {
     struct task * waiter = container_of(node, struct task, wait_node);
-    rescheduleOldOwner |= task_remove_blocked(oldOwner, waiter);
-    rescheduleNewOwner |= task_add_blocked(newOwner, waiter);
+    reschedule_old_owner |= task_remove_blocked(old_owner, waiter);
+    reschedule_new_owner |= task_add_blocked(new_owner, waiter);
   }
-  if (rescheduleOldOwner)
+  if (reschedule_old_owner)
   {
-    task_reschedule(oldOwner);
+    task_reschedule(old_owner);
   }
-  if (rescheduleNewOwner)
+  if (reschedule_new_owner)
   {
-    task_reschedule(newOwner);
+    task_reschedule(new_owner);
   }
 }
 

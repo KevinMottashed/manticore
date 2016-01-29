@@ -32,21 +32,7 @@ void mutex_init(struct mutex * mutex)
 
 void mutex_lock(struct mutex * mutex)
 {
-  kernel_scheduler_disable();
-
-  if (!mutex->locked)
-  {
-    // The mutex is unlocked. Just take it.
-    mutex->locked = true;
-    mutex->owner = running_task;
-    kernel_scheduler_enable();
-  }
-  else
-  {
-    // The mutex is locked. Let the OS schedule the next task.
-    running_task->mutex = mutex;
-    SVC_MUTEX_LOCK();
-  }
+  mutex_timed_lock(mutex, 0);
 }
 
 bool mutex_trylock(struct mutex * mutex)
@@ -63,6 +49,26 @@ bool mutex_trylock(struct mutex * mutex)
     mutex->owner = running_task;
     kernel_scheduler_enable();
     return true;
+  }
+}
+
+bool mutex_timed_lock(struct mutex * mutex, uint32_t milliseconds)
+{
+  kernel_scheduler_disable();
+  if (!mutex->locked)
+  {
+    // The mutex is unlocked. Just take it.
+    mutex->locked = true;
+    mutex->owner = running_task;
+    kernel_scheduler_enable();
+    return true;
+  }
+  else
+  {
+    running_task->mutex = mutex;
+    running_task->sleep = milliseconds;
+    SVC_MUTEX_LOCK();
+    return running_task->mutex_locked;
   }
 }
 

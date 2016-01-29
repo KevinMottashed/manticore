@@ -117,9 +117,17 @@ void mutex_lock(struct mutex * mutex);
  * Try to lock a mutex.
  * This call won't block if the mutex is already locked.
  * @param mutex The mutex to lock.
- * @return True if the mutex was lock.
+ * @return True if the mutex was locked.
  */
 bool mutex_trylock(struct mutex * mutex);
+
+/**
+ * Try to lock a mutex. Give up after the elapsed time.
+ * @param mutex The mutex to lock
+ * @param milliseconds The amount of time to wait before giving up
+ * @return True if the mutex was locked.
+ */
+bool mutex_timed_lock(struct mutex * mutex, uint32_t milliseconds);
 
 /**
  * Unlock a mutex.

@@ -86,15 +86,22 @@ struct task
   // List node used for whatever this task is waiting for.
   struct list_head wait_node;
 
+  // List node used when a task did a system call that can sleep or timeout.
+  // The task will become ready after the sleep or timeout elapses.
+  struct list_head sleep_node;
+
+  // The time in systicks that we need to sleep for before becoming ready.
+  unsigned int sleep;
+
   // The context that needs to be saved when in a blocked state.
   // A task can only be in one state at a time so a union is used to save space.
   union
   {
-    // The time in systicks that we need to sleep for.
-    unsigned int sleep;
-
-    // The mutex we're waiting on.
-    struct mutex * mutex;
+    struct mutex_context
+    {
+      struct mutex * mutex; // The mutex we're waiting on.
+      bool mutex_locked;    // False when timed lock fails.
+    };
 
     struct channel_context
     {

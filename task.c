@@ -35,6 +35,8 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
   task->stack = stack;
   *(uint32_t*)task->stack = TASK_STACK_MAGIC;
   tree_init(&task->blocked);
+  list_init(&task->sleep_node);
+  task->sleep = 0;
 
   tree_init(&task->family);
   if (running_task != NULL)
@@ -133,17 +135,17 @@ bool task_remove_blocked(struct task * task, struct task * unblocked)
   {
     // The unblocked task may be responsible for this tasks increased
     // priority. We need to reevaluate the priority.
-    uint8_t newPriority = task->provisioned_priority;
+    uint8_t new_priority = task->provisioned_priority;
     struct tree_head * node;
     tree_for_each_direct (node, &task->blocked)
     {
       struct task * blocked = container_of(node, struct task, blocked);
       assert(task->priority >= blocked->priority);
-      newPriority = MAX(newPriority, blocked->priority);
+      new_priority = MAX(new_priority, blocked->priority);
     }
-    if (newPriority != task->priority)
+    if (new_priority != task->priority)
     {
-      task->priority = newPriority;
+      task->priority = new_priority;
       return true;
     }
   }
@@ -211,7 +213,6 @@ void task_reschedule(struct task * task)
       task_reschedule(*task->wait);
     }
   }
-
   return;
 }
 

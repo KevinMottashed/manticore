@@ -118,53 +118,40 @@ void manticore_main(void)
     // priority ready task will always run next and will never yield to
     // a lower priority task. The next task to run is the one at
     // the front of the priority queue.
-    struct task * nextTask = get_next_task(&ready_tasks);
-    assert(nextTask != NULL);
-    list_remove(&nextTask->wait_node);
+    struct task * next_task = get_next_task(&ready_tasks);
+    assert(next_task != NULL);
+    list_remove(&next_task->wait_node);
 
     // We now know the next task that will run. We need to find out if
     // there's a sleeping task that needs to wakeup before the time slice expires.
     unsigned int sleep = MAX_SYSTICK_RELOAD;
-    if (nextTask != NULL)
-    {
-      // Have a peek at the next ready task. We need to use a time slice
-      // if the next task has the same priority as the task we're about
-      // to run. This ensures the CPU is shared between all the
-      // highest priority tasks.
-      struct task * temp = get_next_task(&ready_tasks);
-      if (temp != NULL && temp->priority == nextTask->priority)
-      {
-        sleep = TIME_SLICE_TICKS;
-      }
 
-      struct list_head * node;
-      list_for_each(node, &sleeping_tasks)
-      {
-        struct task * t = container_of(node, struct task, wait_node);
-        if (t->priority > nextTask->priority)
-        {
-          // A higher priority sleeping task can reduce the sleep time
-          // to less than the time slice.
-          sleep = MIN(sleep, t->sleep);
-        }
-        else if (t->priority == nextTask->priority)
-        {
-          // An equal priority sleeping task can reduce the sleep time
-          // but still needs to respect the time slice.
-          unsigned int temp = MIN(sleep, t->sleep);
-          sleep = MAX(temp, TIME_SLICE_TICKS);
-        }
-      }
-    }
-    else
+    // Have a peek at the next ready task. We need to use a time slice
+    // if the next task has the same priority as the task we're about
+    // to run. This ensures the CPU is shared between all the
+    // highest priority tasks.
+    struct task * temp = get_next_task(&ready_tasks);
+    if (temp != NULL && temp->priority == next_task->priority)
     {
-      // We have no ready tasks.
-      // Sleep until the next sleeping task needs wakes up.
-      struct list_head * node;
-      list_for_each(node, &sleeping_tasks)
+      sleep = TIME_SLICE_TICKS;
+    }
+
+    struct list_head * node;
+    list_for_each(node, &sleeping_tasks)
+    {
+      struct task * t = container_of(node, struct task, sleep_node);
+      if (t->priority > next_task->priority)
       {
-        struct task * t = container_of(node, struct task, wait_node);
+        // A higher priority sleeping task can reduce the sleep time
+        // to less than the time slice.
         sleep = MIN(sleep, t->sleep);
+      }
+      else if (t->priority == next_task->priority)
+      {
+        // An equal priority sleeping task can reduce the sleep time
+        // but still needs to respect the time slice.
+        unsigned int temp = MIN(sleep, t->sleep);
+        sleep = MAX(temp, TIME_SLICE_TICKS);
       }
     }
 
@@ -195,7 +182,7 @@ void manticore_main(void)
     __ISB();
 
     // We have a task to schedule.
-    running_task = nextTask;
+    running_task = next_task;
     running_task->state = STATE_RUNNING;
     savedStackPointer = &running_task->stack_pointer;
 
@@ -212,13 +199,26 @@ void kernel_update_sleep(unsigned int ticks)
   struct list_head * node;
   list_for_each_safe(node, &sleeping_tasks)
   {
-    struct task * t = container_of(node, struct task, wait_node);
+    struct task * t = container_of(node, struct task, sleep_node);
     if (ticks >= t->sleep)
     {
-      // The task is ready. Remove it from the sleep vector.
+      if (t->state == STATE_MUTEX)
+      {
+        // In this case mutex_timed_lock() timed out.
+        t->mutex_locked = false;
+        list_remove(&t->wait_node);
+
+        // The task waiting for the mutex is no longer blocked on the mutex owner.
+        if (task_remove_blocked(t->mutex->owner, t))
+        {
+          task_reschedule(t->mutex->owner);
+        }
+      }
+
+      // The task is ready. Move it from the sleep list to the ready list.
       t->sleep = 0;
       t->state = STATE_READY;
-      list_remove(&t->wait_node);
+      list_remove(&t->sleep_node);
       list_push_back(&ready_tasks, &t->wait_node);
     }
     else
@@ -296,7 +296,7 @@ void kernel_handle_sleep(void)
 {
   running_task->state = STATE_SLEEP;
   running_task->sleep *= SYSTICK_RELOAD_MS;
-  list_push_back(&sleeping_tasks, &running_task->wait_node);
+  list_push_back(&sleeping_tasks, &running_task->sleep_node);
 }
 
 void kernel_handle_mutex_lock(void)
@@ -314,6 +314,13 @@ void kernel_handle_mutex_lock(void)
   {
     task_reschedule(mutex->owner);
   }
+
+  // Check if the task should timeout while waiting for the mutex.
+  if (running_task->sleep > 0)
+  {
+    running_task->sleep *= SYSTICK_RELOAD_MS;
+    list_push_back(&sleeping_tasks, &running_task->sleep_node);
+  }
 }
 
 void kernel_handle_mutex_unlock(void)
@@ -321,35 +328,38 @@ void kernel_handle_mutex_unlock(void)
   struct mutex * mutex = running_task->mutex;
   assert(mutex != NULL);
 
-  // Unblock the next highest priority task waiting for this mutex.
+  // Determine who the new owner will be.
   struct task * new_owner = get_next_task(&mutex->waiting_tasks);
   assert(new_owner != NULL);
-  list_remove(&new_owner->wait_node);
+  list_remove(&new_owner->wait_node); // Stop waiting for the mutex.
+  list_remove(&new_owner->sleep_node); // Stop sleeping in case of mutex_timed_lock().
+  new_owner->mutex_locked = true;
+
+  // Boths tasks are ready after the mutex is unlocked.
+  // The running task is scheduled first so that it can finish its time slice.
+  // FIXME It will actually start a new time slice instead.
+  running_task->state = STATE_READY;
   new_owner->state = STATE_READY;
+  list_push_back(&ready_tasks, &running_task->wait_node);
   list_push_back(&ready_tasks, &new_owner->wait_node);
 
-  // A task is still ready after unlocking a mutex.
-  running_task->state = STATE_READY;
-  list_push_back(&ready_tasks, &running_task->wait_node);
-
-  // The previous owner of the mutex is no longer blocking tasks waiting
+  // The previous owner (running task) of the mutex is no longer blocking tasks waiting
   // for the mutex. The new owner of the mutex is now blocking all those tasks.
-  bool reschedule_old_owner = false;
+  bool reschedule_running = false;
   bool reschedule_new_owner = false;
-  struct task * old_owner = mutex->owner;
   mutex->owner = new_owner;
-  reschedule_old_owner = task_remove_blocked(old_owner, new_owner);
+  reschedule_running = task_remove_blocked(running_task, new_owner);
 
   struct list_head * node;
   list_for_each(node, &mutex->waiting_tasks)
   {
     struct task * waiter = container_of(node, struct task, wait_node);
-    reschedule_old_owner |= task_remove_blocked(old_owner, waiter);
+    reschedule_running |= task_remove_blocked(running_task, waiter);
     reschedule_new_owner |= task_add_blocked(new_owner, waiter);
   }
-  if (reschedule_old_owner)
+  if (reschedule_running)
   {
-    task_reschedule(old_owner);
+    task_reschedule(running_task);
   }
   if (reschedule_new_owner)
   {

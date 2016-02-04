@@ -11,6 +11,7 @@
   NAME syscall
 
   PUBLIC SVCall_Handler
+  PUBLIC DisableSysTickIrq
 
   IMPORT SaveContext
   IMPORT RestoreKernel
@@ -28,19 +29,21 @@ ICSR ; Interrupt control and status register
   THUMB
 
 DisableSysTickIrq:
-  ; Disable the systick ISR
+  ; Disable the systick IRQ but leave the systick ticking.
+  ; The COUNTFLAG isn't touched.
   LDR R0, =SysTickCtrlAddr
   LDR R0, [R0]
   MOVS R1, #1
   STR R1, [R0]
+  BX LR
 
+ClearSysTickIrq:
   ; Clear a pending systick interrupt
   LDR R0, =ICSR
   LDR R0, [R0]
   LDR R1, =PendStClear
   LDR R1, [R1]
   STR R1, [R0]
-
   BX LR
 
 ; Saves the value associated with the SVC instruction.
@@ -50,7 +53,7 @@ SaveSVC:
   MRS R0, PSP
   MOVS R1, #0x18
   ADD R0, R0, R1
-  LDR R0, [R0] ; R0 now points to intruction after the SVC call
+  LDR R0, [R0] ; R0 now points to the instruction after the SVC call
   SUBS R0, R0, #2 ; Move back to the SVC instruction.
   LDRB R0, [R0] ; Read the LSB of the instruction which will be the SVC value.
   LDR R1, =syscallValue
@@ -63,6 +66,7 @@ SVCall_Handler:
   ; The SysTick IRQ has the same priority as SVC so we don't
   ; need to worry about being preempted and losing the context.
   BL DisableSysTickIrq
+  BL ClearSysTickIrq
   BL SaveContext
   BL SaveSVC
   B RestoreKernel

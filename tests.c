@@ -12,6 +12,7 @@
 
 #include "manticore.h"
 #include "utils.h"
+#include "clock.h"
 
 #include <assert.h>
 
@@ -43,7 +44,14 @@ static __task void * task_test_mutex_priority2_high(void * arg);
 static __task void * task_test_mutex_priority2_low(void * arg);
 static __task void * task_test_mutex_timed_lock1(void * arg);
 static __task void * task_test_mutex_timed_lock2(void * arg);
+static __task void * task_test_sched_time_slice_length(void * arg);
+static __task void * task_test_sched_time_slice_yield1(void * arg);
+static __task void * task_test_sched_time_slice_yield2(void * arg);
+static __task void * task_test_sched_time_slice_sleep1(void * arg);
+static __task void * task_test_sched_time_slice_sleep2(void * arg);
+static __task void * task_test_sched_time_slice_mutex(void * arg);
 
+// TODO split up the tests in a bunch of files
 static void test_context_switching(void);
 static void test_get_priority(void);
 static void test_sleep(void);
@@ -54,6 +62,15 @@ static void test_mutex_trylock(void);
 static void test_mutex_priority1(void);
 static void test_mutex_priority2(void);
 static void test_mutex_timed_lock(void);
+static void test_sched_time_slice_length(void);
+static void test_sched_time_slice_yield1(void);
+static void test_sched_time_slice_yield2(void);
+static void test_sched_time_slice_sleep1(void);
+static void test_sched_time_slice_sleep2(void);
+static void test_sched_time_slice_mutex(void);
+
+static void assert_full_time_slice(void);
+static void assert_max_time_slice(void);
 
 // 128 bytes of stack should be enough for these dummy tasks.
 #define NUM_TASKS (8)
@@ -76,6 +93,12 @@ void test_run_all(void)
   test_mutex_priority1();
   test_mutex_priority2();
   test_mutex_timed_lock();
+  test_sched_time_slice_length();
+  test_sched_time_slice_yield1();
+  test_sched_time_slice_yield2();
+  test_sched_time_slice_sleep1();
+  test_sched_time_slice_sleep2();
+  test_sched_time_slice_mutex();
 }
 
 void test_context_switching(void)
@@ -528,4 +551,185 @@ static void test_mutex_timed_lock(void)
   ut_assert(data.t1->state == STATE_DEAD);
   task_wait(&data.t2);
   ut_assert(data.t2->state == STATE_DEAD);
+}
+
+static __task void * task_test_sched_time_slice_length(void * arg)
+{
+  // Make sure we got a full time slice.
+  volatile uint32_t * done = (volatile uint32_t *)arg;
+  assert_full_time_slice();
+  ++(*done);
+  while (*done != 2);
+  return NULL;
+}
+
+static void test_sched_time_slice_length(void)
+{
+  uint32_t done = 0;
+  task_init(&tasks[0], task_test_sched_time_slice_length, &done, stacks[0], STACK_SIZE, 5);
+  task_init(&tasks[1], task_test_sched_time_slice_length, &done, stacks[1], STACK_SIZE, 5);
+  // Delay so that we don't influence any priorities by blocking.
+  task_delay(50);
+  ut_assert(tasks[0].state == STATE_ZOMBIE);
+  ut_assert(tasks[1].state == STATE_ZOMBIE);
+  task_wait(NULL);
+  task_wait(NULL);
+  ut_assert(tasks[0].state == STATE_DEAD);
+  ut_assert(tasks[1].state == STATE_DEAD);
+  return;
+}
+
+static __task void * task_test_sched_time_slice_yield1(void * arg)
+{
+  // Wait until we have 1ms left in our time slice and yield.
+  // We should get a new time slice after yielding.
+  volatile uint32_t * done = (volatile uint32_t *)arg;
+  assert_full_time_slice();
+  while (SysTick->VAL > SYSTICK_HZ / 1000);
+  task_yield();
+  assert_full_time_slice();
+  ++(*done);
+  while (*done != 2);
+  return NULL;
+}
+
+static void test_sched_time_slice_yield1(void)
+{
+  uint32_t done = 0;
+  task_init(&tasks[0], task_test_sched_time_slice_yield1, &done, stacks[0], STACK_SIZE, 5);
+  task_init(&tasks[1], task_test_sched_time_slice_yield1, &done, stacks[1], STACK_SIZE, 5);
+  // Delay so that we don't influence any priorities by blocking.
+  task_delay(100);
+  ut_assert(tasks[0].state == STATE_ZOMBIE);
+  ut_assert(tasks[1].state == STATE_ZOMBIE);
+  task_wait(NULL);
+  task_wait(NULL);
+  ut_assert(tasks[0].state == STATE_DEAD);
+  ut_assert(tasks[1].state == STATE_DEAD);
+  return;
+}
+
+static __task void * task_test_sched_time_slice_yield2(void * arg)
+{
+  // This task runs alone so it should always get the maximum time slice.
+  // Wait until we've used 10ms of our time slice and yield.
+  // We should get a new maximum time slice after yielding.
+  assert_max_time_slice();
+  while (SysTick->VAL > 0xffffff - SYSTICK_HZ / 100);
+  task_yield();
+  assert_max_time_slice();
+  return NULL;
+}
+
+static void test_sched_time_slice_yield2(void)
+{
+  task_init(&tasks[0], task_test_sched_time_slice_yield2, NULL, stacks[0], STACK_SIZE, 5);
+  task_wait(NULL);
+  ut_assert(tasks[0].state == STATE_DEAD);
+  return;
+}
+
+static __task void * task_test_sched_time_slice_sleep1(void * arg)
+{
+  // Wait until we have 1ms left in our time slice and sleep.
+  // We should get a new time slice after sleeping.
+  volatile uint32_t * done = (volatile uint32_t *)arg;
+  assert_full_time_slice();
+  while (SysTick->VAL > SYSTICK_HZ / 1000);
+  task_delay(5);
+  assert_full_time_slice();
+  ++(*done);
+  while (*done != 2);
+  return NULL;
+}
+
+static void test_sched_time_slice_sleep1(void)
+{
+  uint32_t done = 0;
+  task_init(&tasks[0], task_test_sched_time_slice_sleep1, &done, stacks[0], STACK_SIZE, 5);
+  task_init(&tasks[1], task_test_sched_time_slice_sleep1, &done, stacks[1], STACK_SIZE, 5);
+  // Delay so that we don't influence any priorities by blocking.
+  task_delay(100);
+  ut_assert(tasks[0].state == STATE_ZOMBIE);
+  ut_assert(tasks[1].state == STATE_ZOMBIE);
+  task_wait(NULL);
+  task_wait(NULL);
+  ut_assert(tasks[0].state == STATE_DEAD);
+  ut_assert(tasks[1].state == STATE_DEAD);
+  return;
+}
+
+static __task void * task_test_sched_time_slice_sleep2(void * arg)
+{
+  // This task runs alone so it should always get the maximum time slice.
+  // Wait until we've used 10ms of our time slice and sleep.
+  // We should get a new maximum time slice after sleeping.
+  assert_max_time_slice();
+  while (SysTick->VAL > 0xffffff - SYSTICK_HZ / 100);
+  task_delay(5);
+  assert_max_time_slice();
+  return NULL;
+}
+
+static void test_sched_time_slice_sleep2(void)
+{
+  task_init(&tasks[0], task_test_sched_time_slice_sleep2, NULL, stacks[0], STACK_SIZE, 5);
+  task_wait(NULL);
+  ut_assert(tasks[0].state == STATE_DEAD);
+  return;
+}
+
+static __task void * task_test_sched_time_slice_mutex1(void * arg)
+{
+  struct mutex * mutex = (struct mutex *)arg;
+  assert_full_time_slice();
+  mutex_lock(mutex);
+  task_delay(5);
+  assert_max_time_slice();
+  while (SysTick->VAL > SYSTICK_HZ / 200); // Waste half the time slice
+  mutex_unlock(mutex);
+  ut_assert(SysTick->LOAD <= SYSTICK_HZ / 200); // Make we got a half time slice or less.
+  task_delay(5);
+  return NULL;
+}
+
+static __task void * task_test_sched_time_slice_mutex2(void * arg)
+{
+  struct mutex * mutex = (struct mutex *)arg;
+  assert_full_time_slice();
+  task_delay(2);
+  assert_full_time_slice();
+  mutex_lock(mutex);
+  assert_full_time_slice();
+  mutex_unlock(mutex);
+  return NULL;
+}
+
+static void test_sched_time_slice_mutex(void)
+{
+  struct mutex mutex;
+  mutex_init(&mutex);
+  task_init(&tasks[0], task_test_sched_time_slice_mutex1, &mutex, stacks[0], STACK_SIZE, 5);
+  task_init(&tasks[1], task_test_sched_time_slice_mutex2, &mutex, stacks[1], STACK_SIZE, 5);
+  task_wait(NULL);
+  task_wait(NULL);
+  ut_assert(tasks[0].state == STATE_DEAD);
+  ut_assert(tasks[1].state == STATE_DEAD);
+  return;
+}
+
+static void assert_full_time_slice(void)
+{
+  // Make sure that we were given a 10ms time slice
+  // and that there's at least 9990us left.
+  ut_assert(SysTick->LOAD == SYSTICK_HZ / 100);
+  ut_assert(SysTick->VAL >= SYSTICK_HZ / 100 - SYSTICK_HZ / 100000);
+}
+
+static void assert_max_time_slice(void)
+{
+  // Make sure that we were given the maximum time slice
+  // and that there's at most 10us used.
+  ut_assert(SysTick->LOAD == 0xffffff);
+  ut_assert(SysTick->VAL >= 0xffffff - SYSTICK_HZ / 100000);
 }

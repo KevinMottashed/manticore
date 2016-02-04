@@ -14,10 +14,11 @@
 
   IMPORT SaveContext
   IMPORT RestoreKernel
+  IMPORT DisableSysTickIrq
   IMPORT isr_exit_to_kernel
 
   SECTION .data : CONST(2)
-  PUBLIC  SysTickCtrlAddr
+  PUBLIC SysTickCtrlAddr
   DATA
 SysTickCtrlAddr
   DC32 0xE000E010
@@ -25,21 +26,20 @@ SysTickCtrlAddr
   SECTION .text : CODE (2)
   THUMB
 
-ClearSysTick:
-  ; This function reads the systick control register
-  ; to clear the COUNTFLAG field.
-  ; R0 = SysTick->CTRL address
-  ; R1 = SysTick->CTRL value
-  LDR R0, =SysTickCtrlAddr
-  LDR R0, [R0]
-  LDR R1, [R0]
-  BX LR
-
 SysTick_Handler:
-  ; The systick handler only needs to save to save the current context
-  ; and then let the kernel take over. Clear the COUNTFLAG field.
+  ; The systick handler only needs to save the task context
+  ; and then let the kernel take over.
+  ; Sometimes there's no task context to save. This happens
+  ; when the systick expires in the PendSV handler. This interrupt
+  ; is tail chained from the PendSV handler so we never entered task context.
+  ; Bit 3 in the LR register tells us if it's tail chained or not.
+  MOVS R0, #8
+  MOV R1, LR
+  TST R0, R1
+  BEQ no_context_save
   BL SaveContext
-  BL ClearSysTick
+no_context_save:
+  BL DisableSysTickIrq
   LDR R0, =RestoreKernel
   BX R0
 

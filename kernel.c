@@ -38,10 +38,6 @@
 // The number of SysTick ticks in a time slice
 #define TIME_SLICE_TICKS (TIME_SLICE_MS * SYSTICK_RELOAD_MS)
 
-// This is the aproximate number of systicks spent in the kernel
-// while the systick timer is being reset.
-#define KERNEL_SYSTICK_DISABLE (2)
-
 volatile uint8_t syscallValue;
 volatile uint32_t * savedStackPointer;
 
@@ -79,6 +75,10 @@ static __task void * kernel_task_init(void * arg);
 
 void manticore_init(void)
 {
+  // These are undefined after reset so give them sane values.
+  SysTick->LOAD = 0;
+  SysTick->VAL = 0;
+
   // Initialize the lists of ready/sleeping tasks.
   list_init(&ready_tasks);
   list_init(&sleeping_tasks);
@@ -96,19 +96,28 @@ void manticore_init(void)
 void manticore_main(void)
 {
   kernel_running = true;
-
-  unsigned int kernelTicks = 0;
-  unsigned int systickReload = 0xFFFFFF;
+  uint32_t kernel_context_ticks = 0;
 
   while (true)
   {
-    // The systick value when entering the kernel.
-    int kernelStartTicks = SysTick->VAL;
+    // Figure out how much time was actually spent in task context.
+    uint32_t load = SysTick->LOAD;
+    uint32_t task_context_ticks = load - SysTick->VAL;
+    uint32_t task_leftover_ticks = SysTick->VAL;
+    bool task_finished_time_slice = SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk;
+    if (task_finished_time_slice)
+    {
+      task_context_ticks += SysTick->LOAD;
+    }
+
+    // The systick is now used to time how long we spend in the kernel.
+    SysTick->LOAD = MAX_SYSTICK_RELOAD;
+    SysTick->VAL = 0;
 
     assert(task_check(running_task));
 
     // Update how much time is left for each sleeping task to wake up.
-    kernel_update_sleep(systickReload - kernelStartTicks + kernelTicks);
+    kernel_update_sleep(task_context_ticks + kernel_context_ticks);
 
     // Handle the system call.
     kernel_handle_syscall(syscallValue);
@@ -124,7 +133,7 @@ void manticore_main(void)
 
     // We now know the next task that will run. We need to find out if
     // there's a sleeping task that needs to wakeup before the time slice expires.
-    unsigned int sleep = MAX_SYSTICK_RELOAD;
+    uint32_t task_ticks = MAX_SYSTICK_RELOAD;
 
     // Have a peek at the next ready task. We need to use a time slice
     // if the next task has the same priority as the task we're about
@@ -133,7 +142,16 @@ void manticore_main(void)
     struct task * temp = get_next_task(&ready_tasks);
     if (temp != NULL && temp->priority == next_task->priority)
     {
-      sleep = TIME_SLICE_TICKS;
+      // In the case where a task is being scheduled 2x in a row then
+      // we'll finish the time slice instead of starting a new one.
+      if (next_task == running_task && !task_finished_time_slice)
+      {
+        task_ticks = task_leftover_ticks;
+      }
+      else
+      {
+        task_ticks = TIME_SLICE_TICKS;
+      }
     }
 
     struct list_head * node;
@@ -142,49 +160,29 @@ void manticore_main(void)
       struct task * t = container_of(node, struct task, sleep_node);
       if (t->priority > next_task->priority)
       {
-        // A higher priority sleeping task can reduce the sleep time
+        // A higher priority sleeping task can reduce the ticks
         // to less than the time slice.
-        sleep = MIN(sleep, t->sleep);
+        task_ticks = MIN(task_ticks, t->sleep);
       }
       else if (t->priority == next_task->priority)
       {
-        // An equal priority sleeping task can reduce the sleep time
-        // but still needs to respect the time slice.
-        unsigned int temp = MIN(sleep, t->sleep);
-        sleep = MAX(temp, TIME_SLICE_TICKS);
+        // An equal priority sleeping task can reduce the ticks
+        // but still needs to respect the time slice or leftover time slice.
+        task_ticks = MIN(task_ticks, MAX(TIME_SLICE_TICKS, t->sleep));
       }
     }
-
-    // We don't want to sleep for less than 1ms.
-    // When the systick timer is enabled we don't want it to immediatly fire.
-    // We need to make it back to the user task before the IRQ goes off.
-    // This will result in sleep() calls lasting up to 1ms longer than expected.
-    // The other option is to wake up early but I think that sleeping longer is better.
-    // In my experience sleep() calls are used to wait at least x amount of time.
-    // For example:
-    // 1. Start an operation.
-    // 2. sleep()
-    // 3. Check the status. The operation should be done by now or its failed.
-    sleep = MAX(sleep, SYSTICK_RELOAD_MS);
-    systickReload = sleep;
-
-    // Remember the amount of time spent in the kernel.
-    kernelTicks = kernelStartTicks - SysTick->VAL + KERNEL_SYSTICK_DISABLE;
-
-    // Restart the systick timer.
-    SysTick->LOAD = systickReload;
-    SysTick->VAL = 0;
-    SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk;
-    __DSB();
-    __ISB();
-    SysTick->LOAD = 0;
-    __DSB();
-    __ISB();
 
     // We have a task to schedule.
     running_task = next_task;
     running_task->state = STATE_RUNNING;
     savedStackPointer = &running_task->stack_pointer;
+
+    // Remember the amount of time spent in the kernel.
+    kernel_context_ticks = MAX_SYSTICK_RELOAD - SysTick->VAL;
+
+    // Load the systick timer. The IRQ will be reenabled in the PendSV handler.
+    SysTick->LOAD = task_ticks;
+    SysTick->VAL = 0;
 
     // Trigger a PendSV interrupt to return to task context.
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;

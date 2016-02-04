@@ -3,7 +3,7 @@
  * "THE BEER-WARE LICENSE" (Revision 42):
  * <kevinmottashed@gmail.com> wrote this file. As long as you retain this notice you
  * can do whatever you want with this stuff. If we meet some day, and you think
- * this stuff is worth it, you can buy me a beer in return. 
+ * this stuff is worth it, you can buy me a beer in return.
  * -Kevin Mottashed
  * ----------------------------------------------------------------------------
  */
@@ -13,6 +13,9 @@
 
 // The 8MHz HSE clock will be multiplied by 4 and used as the system clock.
 #define SYSTEM_CLOCK (32000000)
+
+// The SysTick uses a scaled system clock.
+#define SYSTICK_HZ (SYSTEM_CLOCK / 8)
 
 void clock_init(void);
 

@@ -30,45 +30,74 @@
 #define ut_assert assert
 #endif
 
+// TODO Break up these tests into a bunch of files.
+
 extern __task void * Task_Busy_Yield(void * arg);
+static void test_context_switching(void);
+
 static __task void * task_test_get_priority(void * arg);
+static void test_get_priority(void);
+
 static __task void * task_test_sleep(void * arg);
+static void test_sleep(void);
+
 static __task void * task_test_delay(void * arg);
+static void test_delay(void);
+
 static __task void * task_test_yield(void * arg);
+static void test_yield(void);
+
+// Tests for mutexes
 static __task void * task_test_mutex_lock(void * arg);
+static void test_mutex_lock(void);
+
 static __task void * task_test_mutex_trylock(void * arg);
+static void test_mutex_trylock(void);
+
 static __task void * task_test_mutex_priority1_high(void * arg);
 static __task void * task_test_mutex_priority1_med(void * arg);
 static __task void * task_test_mutex_priorityl_low(void * arg);
+static void test_mutex_priority1(void);
+
 static __task void * task_test_mutex_priority2_high(void * arg);
 static __task void * task_test_mutex_priority2_low(void * arg);
+static void test_mutex_priority2(void);
+
 static __task void * task_test_mutex_timed_lock1(void * arg);
 static __task void * task_test_mutex_timed_lock2(void * arg);
-static __task void * task_test_sched_time_slice_length(void * arg);
-static __task void * task_test_sched_time_slice_yield1(void * arg);
-static __task void * task_test_sched_time_slice_yield2(void * arg);
-static __task void * task_test_sched_time_slice_sleep1(void * arg);
-static __task void * task_test_sched_time_slice_sleep2(void * arg);
-static __task void * task_test_sched_time_slice_mutex(void * arg);
-
-// TODO split up the tests in a bunch of files
-static void test_context_switching(void);
-static void test_get_priority(void);
-static void test_sleep(void);
-static void test_delay(void);
-static void test_yield(void);
-static void test_mutex_lock(void);
-static void test_mutex_trylock(void);
-static void test_mutex_priority1(void);
-static void test_mutex_priority2(void);
 static void test_mutex_timed_lock(void);
+
+// Tests for recursive mutexes.
+static __task void * task_test_recursive_mutex_lock(void * arg);
+static void test_recursive_mutex_lock(void);
+
+static __task void * task_test_recursive_mutex_trylock(void * arg);
+static void test_recursive_mutex_trylock(void);
+
+static __task void * task_test_recursive_mutex_priority_high(void * arg);
+static __task void * task_test_recursive_mutex_priority_low(void * arg);
+static void test_recursive_mutex_priority(void);
+
+// Tests for time slices
+static __task void * task_test_sched_time_slice_length(void * arg);
 static void test_sched_time_slice_length(void);
+
+static __task void * task_test_sched_time_slice_yield1(void * arg);
 static void test_sched_time_slice_yield1(void);
+
+static __task void * task_test_sched_time_slice_yield2(void * arg);
 static void test_sched_time_slice_yield2(void);
+
+static __task void * task_test_sched_time_slice_sleep1(void * arg);
 static void test_sched_time_slice_sleep1(void);
+
+static __task void * task_test_sched_time_slice_sleep2(void * arg);
 static void test_sched_time_slice_sleep2(void);
+
+static __task void * task_test_sched_time_slice_mutex(void * arg);
 static void test_sched_time_slice_mutex(void);
 
+// Helper asserts
 static void assert_full_time_slice(void);
 static void assert_max_time_slice(void);
 
@@ -93,6 +122,9 @@ void test_run_all(void)
   test_mutex_priority1();
   test_mutex_priority2();
   test_mutex_timed_lock();
+  test_recursive_mutex_lock();
+  test_recursive_mutex_trylock();
+  test_recursive_mutex_priority();
   test_sched_time_slice_length();
   test_sched_time_slice_yield1();
   test_sched_time_slice_yield2();
@@ -231,7 +263,7 @@ static __task void * task_test_mutex_lock(void * arg)
 static void test_mutex_lock(void)
 {
   struct test_mutex_data data;
-  mutex_init(&data.mutex);
+  mutex_init(&data.mutex, MUTEX_ATTR_DEFAULT);
   data.critical_section = false;
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
@@ -269,7 +301,7 @@ static __task void * task_test_mutex_trylock(void * arg)
 static void test_mutex_trylock(void)
 {
   struct test_mutex_data data;
-  mutex_init(&data.mutex);
+  mutex_init(&data.mutex, MUTEX_ATTR_DEFAULT);
   data.critical_section = false;
   for (int32_t i = 0; i < NUM_TASKS; ++i)
   {
@@ -402,7 +434,7 @@ static void test_mutex_priority1(void)
     .med = &tasks[1],
     .low = &tasks[2]
   };
-  mutex_init(&data.mutex);
+  mutex_init(&data.mutex, MUTEX_ATTR_DEFAULT);
   task_init(&tasks[0], task_test_mutex_priority1_high, &data, stacks[0], STACK_SIZE, 6);
   task_init(&tasks[1], task_test_mutex_priority1_med, &data, stacks[1], STACK_SIZE, 5);
   task_init(&tasks[2], task_test_mutex_priority1_low, &data, stacks[2], STACK_SIZE, 4);
@@ -484,7 +516,7 @@ static void test_mutex_priority2(void)
     .high = &tasks[0],
     .low = &tasks[1]
   };
-  mutex_init(&data.mutex);
+  mutex_init(&data.mutex, MUTEX_ATTR_DEFAULT);
   task_init(&tasks[0], task_test_mutex_priority2_high, &data, stacks[0], STACK_SIZE, 6);
   task_init(&tasks[1], task_test_mutex_priority2_low, &data, stacks[1], STACK_SIZE, 5);
   // Delay so that we don't influence any priorities by blocking.
@@ -540,7 +572,7 @@ static void test_mutex_timed_lock(void)
     .t1 = &tasks[0],
     .t2 = &tasks[1],
   };
-  mutex_init(&data.mutex);
+  mutex_init(&data.mutex, MUTEX_ATTR_DEFAULT);
   task_init(&tasks[0], task_test_mutex_timed_lock1, &data, stacks[0], STACK_SIZE, 5);
   task_init(&tasks[1], task_test_mutex_timed_lock2, &data, stacks[1], STACK_SIZE, 5);
   // Delay so that we don't influence any priorities by blocking.
@@ -551,6 +583,171 @@ static void test_mutex_timed_lock(void)
   ut_assert(data.t1->state == STATE_DEAD);
   task_wait(&data.t2);
   ut_assert(data.t2->state == STATE_DEAD);
+}
+
+static __task void * task_test_recursive_mutex_lock(void * arg)
+{
+  // Make sure we can lock/unlock a bunch of times.
+  struct mutex * mutex = (struct mutex*)arg;
+  for (int32_t i = 0; i < 10; ++i)
+    mutex_lock(mutex);
+  for (int32_t i = 0; i < 10; ++i)
+    mutex_unlock(mutex);
+  return NULL;
+}
+
+static void test_recursive_mutex_lock(void)
+{
+  struct mutex mutex;
+  mutex_init(&mutex, MUTEX_ATTR_RECURSIVE);
+  task_init(&tasks[0], task_test_recursive_mutex_lock, &mutex, stacks[0], STACK_SIZE, 5);
+  task_wait(NULL);
+}
+
+static __task void * task_test_recursive_mutex_trylock(void * arg)
+{
+  // Make sure we can trylock after locking.
+  struct mutex * mutex = (struct mutex*)arg;
+  mutex_lock(mutex);
+  bool locked = mutex_trylock(mutex);
+  ut_assert(locked);
+  mutex_unlock(mutex);
+  mutex_unlock(mutex);
+  return NULL;
+}
+
+static void test_recursive_mutex_trylock(void)
+{
+  struct mutex mutex;
+  mutex_init(&mutex, MUTEX_ATTR_RECURSIVE);
+  task_init(&tasks[0], task_test_recursive_mutex_trylock, &mutex, stacks[0], STACK_SIZE, 5);
+  task_wait(NULL);
+}
+
+static __task void * task_test_recursive_mutex_priority_high(void * arg)
+{
+  struct mutex * mutex = (struct mutex*)arg;
+  struct task * high = &tasks[0];
+  struct task * low = &tasks[1];
+
+  ut_assert(low->state == STATE_READY);
+  ut_assert(low->priority == low->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+
+  mutex_lock(mutex);
+
+  ut_assert(low->state == STATE_READY);
+  ut_assert(low->priority == low->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+
+  // Let the other task run.
+  task_delay(5);
+
+  // Make sure the state of the other task doesn't change when
+  // we lock the mutex a bunch of times.
+  for (int32_t i = 0; i < 3; ++i) {
+    ut_assert(low->state == STATE_MUTEX);
+    ut_assert(low->priority == low->provisioned_priority);
+    ut_assert(high->priority == high->provisioned_priority);
+    mutex_lock(mutex);
+  }
+
+  // Unlock the mutex to let other task have it.
+  for (int32_t i = 0; i < 4; ++i) {
+    ut_assert(low->state == STATE_MUTEX);
+    ut_assert(low->priority == low->provisioned_priority);
+    ut_assert(high->priority == high->provisioned_priority);
+    mutex_unlock(mutex);
+  }
+
+  // The other task should now have the mutex.
+  ut_assert(low->state == STATE_READY);
+  ut_assert(low->priority == low->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+
+  task_delay(5);
+
+  // Lock/unlock it.
+  mutex_lock(mutex);
+  ut_assert(low->state == STATE_READY);
+  ut_assert(low->priority == low->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+  mutex_unlock(mutex);
+  ut_assert(low->state == STATE_READY);
+  ut_assert(low->priority == low->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+
+  return NULL;
+}
+
+static __task void * task_test_recursive_mutex_priority_low(void * arg)
+{
+  struct mutex * mutex = (struct mutex*)arg;
+  struct task * high = &tasks[0];
+  struct task * low = &tasks[1];
+
+  ut_assert(high->state == STATE_SLEEP);
+  ut_assert(low->priority == low->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+
+  mutex_lock(mutex);
+
+  ut_assert(high->state == STATE_SLEEP);
+  ut_assert(low->priority == low->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+
+  // Make sure we can lock it a bunch of times.
+  for (int32_t i = 0; i < 3; ++i) {
+    ut_assert(high->state == STATE_SLEEP);
+    ut_assert(low->priority == low->provisioned_priority);
+    ut_assert(high->priority == high->provisioned_priority);
+    mutex_lock(mutex);
+  }
+
+  // Wait for the other task to try to take back the mutex.
+  // We should inherit their priority.
+  task_delay(10);
+  ut_assert(high->state == STATE_MUTEX);
+  ut_assert(low->priority == high->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+
+  // Make sure we can still lock it a bunch of times.
+  for (int32_t i = 0; i < 3; ++i) {
+    ut_assert(high->state == STATE_MUTEX);
+    ut_assert(low->priority == high->provisioned_priority);
+    ut_assert(high->priority == high->provisioned_priority);
+    mutex_lock(mutex);
+  }
+
+  // Unlock it to let the other task take it.
+  for (int32_t i = 0; i < 7; ++i) {
+    ut_assert(high->state == STATE_MUTEX);
+    ut_assert(low->priority == high->provisioned_priority);
+    ut_assert(high->priority == high->provisioned_priority);
+    mutex_unlock(mutex);
+  }
+
+  // The other task is done and we've lost our high priority.
+  ut_assert(high->state == STATE_ZOMBIE);
+  ut_assert(low->priority == low->provisioned_priority);
+  ut_assert(high->priority == high->provisioned_priority);
+
+  return NULL;
+}
+
+static void test_recursive_mutex_priority(void)
+{
+  struct mutex mutex;
+  mutex_init(&mutex, MUTEX_ATTR_RECURSIVE);
+  task_init(&tasks[0], task_test_recursive_mutex_priority_high, &mutex, stacks[0], STACK_SIZE, 10);
+  task_init(&tasks[1], task_test_recursive_mutex_priority_low, &mutex, stacks[1], STACK_SIZE, 5);
+  task_delay(20);
+  struct task * finished = NULL;
+  task_wait(&finished);
+  ut_assert(finished == &tasks[0]);
+  finished = NULL;
+  task_wait(&finished);
+  ut_assert(finished == &tasks[1]);
 }
 
 static __task void * task_test_sched_time_slice_length(void * arg)
@@ -708,7 +905,7 @@ static __task void * task_test_sched_time_slice_mutex2(void * arg)
 static void test_sched_time_slice_mutex(void)
 {
   struct mutex mutex;
-  mutex_init(&mutex);
+  mutex_init(&mutex, MUTEX_ATTR_NON_RECURSIVE);
   task_init(&tasks[0], task_test_sched_time_slice_mutex1, &mutex, stacks[0], STACK_SIZE, 5);
   task_init(&tasks[1], task_test_sched_time_slice_mutex2, &mutex, stacks[1], STACK_SIZE, 5);
   task_wait(NULL);

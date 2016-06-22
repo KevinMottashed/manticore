@@ -21,7 +21,11 @@
 struct mutex
 {
   uint8_t id; // Unique identifier for this mutex.
-  bool locked;
+
+  // Number of times the mutex has been locked.
+  // Can only be 0 or 1 for a non-recursive mutex.
+  uint8_t locked;
+  bool recursive;
   struct task * owner; // The task that owns this mutex.
 
   // The list of tasks waiting for this mutex.

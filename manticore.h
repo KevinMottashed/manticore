@@ -11,7 +11,9 @@
 #ifndef MANTICORE_H
 #define MANTICORE_H
 
+#include "task.h"
 #include "mutex.h"
+#include "channel.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -43,6 +45,8 @@ void manticore_main(void);
 // RTOS task. This means that the normal calling conventions don't need
 // to be followed and that it only needs to preserve the LR register.
 typedef void * (__task * task_entry_t)(void *);
+
+struct task;
 
 /**
  * Initialize a new task.
@@ -100,11 +104,21 @@ void task_yield(void);
 // Mutex
 // --------------------------------------
 
+struct mutex;
+
+// Controls if the mutex can be locked recursively.
+#define MUTEX_ATTR_NON_RECURSIVE                (0 << 0)
+#define MUTEX_ATTR_RECURSIVE                    (1 << 0)
+
+// The default mutex is non-recursive.
+#define MUTEX_ATTR_DEFAULT                      MUTEX_ATTR_NON_RECURSIVE
+
 /**
  * Initialize a new mutex.
  * @param mutex The mutex to initialize.
+ * @param attributes The attributes to initialize the mutex with. See MUTEX_ATTR_*.
  */
-void mutex_init(struct mutex * mutex);
+void mutex_init(struct mutex * mutex, uint32_t attributes);
 
 /**
  * Lock a mutex.
@@ -138,6 +152,8 @@ void mutex_unlock(struct mutex * mutex);
 // --------------------------------------
 // Channel
 // --------------------------------------
+
+struct channel;
 
 /**
  * Initialize a new channel.

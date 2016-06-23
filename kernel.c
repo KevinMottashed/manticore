@@ -18,7 +18,6 @@
 #include "utils.h"
 #include "clock.h"
 #include "mutex.h"
-#include "heap.h"
 #include "list.h"
 
 #include <stdint.h>

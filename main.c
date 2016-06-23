@@ -11,7 +11,6 @@
 #include "manticore.h"
 #include "clock.h"
 #include "gpio.h"
-#include "heap.h"
 #include "utils.h"
 #include "tests.h"
 

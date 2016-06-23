@@ -15,7 +15,6 @@
 #include "syscall.h"
 #include "system.h"
 #include "kernel.h"
-#include "heap.h"
 
 #include <assert.h>
 

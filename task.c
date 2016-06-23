@@ -4,7 +4,6 @@
 
 #include "kernel.h"
 #include "utils.h"
-#include "heap.h"
 
 #include <assert.h>
 #include <string.h>

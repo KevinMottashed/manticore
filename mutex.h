@@ -12,7 +12,7 @@
 #ifndef MUTEX_H
 #define MUTEX_H
 
-#include "list.h"
+#include "pqueue.h"
 #include "task.h"
 
 #include <stdint.h>
@@ -28,8 +28,8 @@ struct mutex
   bool recursive;
   struct task * owner; // The task that owns this mutex.
 
-  // The list of tasks waiting for this mutex.
-  struct list_head waiting_tasks;
+  // The priority queue of tasks waiting for this mutex.
+  struct pqueue waiting_tasks;
 };
 
 #endif

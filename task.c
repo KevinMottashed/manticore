@@ -33,7 +33,9 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
   task->stack_pointer -= sizeof(struct context);
   task->stack = stack;
   *(uint32_t*)task->stack = TASK_STACK_MAGIC;
-  tree_init(&task->blocked);
+  task->blocked = NULL;
+  pqueue_init(&task->blocking, pqueue_blocking_compare);
+  list_init(&task->blocking_node);
   list_init(&task->sleep_node);
   task->sleep = 0;
 
@@ -43,6 +45,9 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
     tree_add_child(&running_task->family, &task->family);
   }
 
+  task->waiting = NULL;
+  list_init(&task->wait_node);
+
   struct context * context = (struct context*)task->stack_pointer;
   memset(context, 0, sizeof(*context)); // Most registers will start off as zero.
   context->R0 = (uint32_t)arg;
@@ -51,7 +56,7 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
   context->xPSR.b.T = 1; // Enable Thumb mode.
 
   // Add the task to the queue of ready tasks.
-  list_push_back(&ready_tasks, &task->wait_node);
+  task_wait_on(task, &ready_tasks);
 
   if (kernel_running)
   {
@@ -100,128 +105,99 @@ void task_delay(unsigned int ms)
   SVC_SLEEP();
 }
 
-bool task_add_blocked(struct task * task, struct task * blocked)
+void task_add_blocked(struct task * task, struct task * blocked)
 {
   assert(task != NULL);
   assert(blocked != NULL);
+  assert(blocked->blocked == NULL);
+  assert(list_empty(&blocked->blocking_node));
 
-  // Add the blocked task as a child in the tree
-  tree_add_child(&task->blocked, &blocked->blocked);
+  // Start blocking the task.
+  blocked->blocked = task;
+  pqueue_push(&task->blocking, &blocked->blocking_node);
 
-  // Check if our priority needs to be increased.
-  if (blocked->priority > task->priority)
+  // Walk through the chain of tasks that we're blocked on
+  // and increase their priority if needed.
+  while (task && blocked->priority > task->priority)
   {
     task->priority = blocked->priority;
-    return true;
+    if (task->waiting)
+      pqueue_increase(task->waiting, &task->wait_node);
+    if (task->blocked)
+      pqueue_increase(&task->blocked->blocking, &task->blocking_node);
+    task = task->blocked;
   }
-  return false;
 }
 
-bool task_remove_blocked(struct task * task, struct task * unblocked)
+void task_remove_blocked(struct task * task, struct task * unblocked)
 {
   assert(task != NULL);
   assert(unblocked != NULL);
-
-  // Remove the unblocked task from the blocked tree.
-  // We're no longer blocked on the parent task.
-  tree_remove_child(&unblocked->blocked);
+  assert(unblocked->blocked == task);
+  assert(!list_empty(&unblocked->blocking_node));
 
   // A task that was blocked on us should never have a higher priority.
   assert(task->priority >= unblocked->priority);
 
-  if (unblocked->priority == task->priority &&
-      task->provisioned_priority != task->priority)
-  {
-    // The unblocked task may be responsible for this tasks increased
-    // priority. We need to reevaluate the priority.
-    uint8_t new_priority = task->provisioned_priority;
-    struct tree_head * node;
-    tree_for_each_direct (node, &task->blocked)
-    {
-      struct task * blocked = container_of(node, struct task, blocked);
-      assert(task->priority >= blocked->priority);
-      new_priority = MAX(new_priority, blocked->priority);
+  // Stop blocking the task.
+  unblocked->blocked = NULL;
+  list_remove(&unblocked->blocking_node);
+
+  // Walk through the chain of tasks that we're blocked on
+  // and decrease their priority if needed.
+  while (task) {
+    // Our next priority is the maximum of our provisioned priority and
+    // the priority of the tasks that are blocked on us.
+    uint8_t priority = task->provisioned_priority;
+    if (!pqueue_empty(&task->blocking)) {
+      struct task * high = task_from_blocking_node(pqueue_peek(&task->blocking));
+      if (high->priority > priority)
+        priority = high->priority;
     }
-    if (new_priority != task->priority)
-    {
-      task->priority = new_priority;
-      return true;
+
+    assert(priority <= task->priority);
+    if (priority < task->priority) {
+      task->priority = priority;
+      if (task->blocked)
+        pqueue_decrease(&task->blocked->blocking, &task->blocking_node);
+      if (task->waiting)
+        pqueue_decrease(task->waiting, &task->wait_node);
+      task = task->blocked;
+    }
+    else {
+      // The priority didn't need to be decreased. When
+      // this happens we know that everything further down the chain
+      // also doesn't need to be decreased.
+      break;
     }
   }
-  return false;
 }
 
-bool task_update_blocked(struct task * task, struct task * blocked)
+void task_wait_on(struct task * task, struct pqueue * pqueue)
 {
-  // Check if our priority needs to be increased.
-  if (blocked->priority > task->priority)
-  {
-    task->priority = blocked->priority;
-    return true;
-  }
-  // Check if our priority needs to be decreased.
-  else if (blocked->priority < task->priority)
-  {
-    uint8_t newPriority = task->provisioned_priority;
-    struct tree_head * node;
-    tree_for_each_direct (node, &task->blocked)
-    {
-      struct task * blocked = container_of(node, struct task, blocked);
-      assert(task->priority >= blocked->priority);
-      newPriority = MAX(newPriority, blocked->priority);
-    }
-    if (newPriority != task->priority)
-    {
-      task->priority = newPriority;
-      return true;
-    }
-  }
-  return false;
+  assert(task);
+  assert(pqueue);
+  assert(task->waiting == NULL);
+  assert(list_empty(&task->wait_node));
+  task->waiting = pqueue;
+  pqueue_push(pqueue, &task->wait_node);
 }
 
-void task_reschedule(struct task * task)
+void task_stop_waiting(struct task * task)
 {
-  assert(task != NULL);
-  assert(task->state != STATE_RUNNING);
-
-  if (task->state == STATE_MUTEX)
-  {
-    // We might need to reschedule the task that we're blocked on if
-    // its priority changes as a result of our priority changing.
-    bool reschedule = task_update_blocked(task->mutex->owner, task);
-    if (reschedule)
-    {
-      task_reschedule(task->mutex->owner);
-    }
-  }
-  else if (task->state == STATE_CHANNEL_RPLY)
-  {
-    // We're waiting to receive a reply from another task.
-    bool reschedule = task_update_blocked(task->channel->server, task);
-    if (reschedule)
-    {
-      task_reschedule(task->channel->server);
-    }
-  }
-  else if (task->state == STATE_WAIT && task->wait != NULL && *task->wait != NULL)
-  {
-    // Priority inheritence only applies when we're waiting on a specific child.
-    bool reschedule = task_update_blocked(*task->wait, task);
-    if (reschedule)
-    {
-      task_reschedule(*task->wait);
-    }
-  }
-  return;
+  assert(task);
+  assert(task->waiting);
+  task->waiting = NULL;
+  list_remove(&task->wait_node);
 }
 
 void task_destroy(struct task * task)
 {
   assert(task != NULL);
 
-  // Make sure no tasks are blocked on a dying task
+  // Make sure the dying tasks isn't blocking other tasks
   // or they'll be permanantly blocked.
-  assert(tree_no_children(&task->blocked));
+  assert(pqueue_empty(&task->blocking));
 
   // Remove the task from the family tree.
   tree_remove(&task->family);
@@ -240,4 +216,18 @@ bool task_check(struct task * task)
 {
   // Make sure the stack didn't overflow.
   return *(uint32_t*)task->stack == TASK_STACK_MAGIC;
+}
+
+bool pqueue_wait_compare(struct list_head * a, struct list_head * b)
+{
+  struct task * ta = container_of(a, struct task, wait_node);
+  struct task * tb = container_of(b, struct task, wait_node);
+  return ta->priority > tb->priority;
+}
+
+bool pqueue_blocking_compare(struct list_head * a, struct list_head * b)
+{
+  struct task * ta = container_of(a, struct task, blocking_node);
+  struct task * tb = container_of(b, struct task, blocking_node);
+  return ta->priority > tb->priority;
 }

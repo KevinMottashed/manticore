@@ -2133,6 +2133,12 @@
     <name>$PROJ_DIR$\mutex.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\pqueue.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\pqueue.h</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\syscall_isr.s</name>
   </file>
   <file>
@@ -2140,6 +2146,9 @@
   </file>
   <file>
     <name>$PROJ_DIR$\task.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\task.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\task_busy_yield.s</name>

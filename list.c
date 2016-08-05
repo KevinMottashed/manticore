@@ -45,6 +45,16 @@ void list_push_back(struct list_head * head, struct list_head * node)
   head->prev = node;
 }
 
+struct list_head * list_pop_front(struct list_head * head)
+{
+  assert(head);
+  assert(head->next);
+  struct list_head * result = list_front(head);
+  if (result != NULL)
+    list_remove(result);
+  return result;
+}
+
 void list_remove(struct list_head * node)
 {
   assert(node != NULL);
@@ -80,6 +90,11 @@ void list_append(struct list_head * head, struct list_head * list)
   }
 }
 
+void list_insert(struct list_head * position, struct list_head * node)
+{
+  list_push_front(position, node);
+}
+
 bool list_empty(struct list_head * head)
 {
   assert(head != NULL);
@@ -99,6 +114,10 @@ uint32_t list_size(struct list_head * head)
 
 struct list_head * list_front(struct list_head * head)
 {
+  assert(head);
+  assert(head->next);
+  if (head->next == head)
+    return NULL;
   return head->next;
 }
 

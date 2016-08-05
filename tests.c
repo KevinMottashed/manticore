@@ -97,6 +97,10 @@ static void test_sched_time_slice_sleep2(void);
 static __task void * task_test_sched_time_slice_mutex(void * arg);
 static void test_sched_time_slice_mutex(void);
 
+static __task void * task_test_sched_context_switch_performance(void * arg);
+static void test_sched_context_switch_performance1(void);
+static void test_sched_context_switch_performance2(void);
+
 // Helper asserts
 static void assert_full_time_slice(void);
 static void assert_max_time_slice(void);
@@ -131,6 +135,8 @@ void test_run_all(void)
   test_sched_time_slice_sleep1();
   test_sched_time_slice_sleep2();
   test_sched_time_slice_mutex();
+  test_sched_context_switch_performance1();
+  test_sched_context_switch_performance2();
 }
 
 void test_context_switching(void)
@@ -885,7 +891,7 @@ static __task void * task_test_sched_time_slice_mutex1(void * arg)
   assert_max_time_slice();
   while (SysTick->VAL > SYSTICK_HZ / 200); // Waste half the time slice
   mutex_unlock(mutex);
-  ut_assert(SysTick->LOAD <= SYSTICK_HZ / 200); // Make we got a half time slice or less.
+  ut_assert(SysTick->LOAD <= SYSTICK_HZ / 200); // Make sure we got a half time slice or less.
   task_delay(5);
   return NULL;
 }
@@ -908,11 +914,82 @@ static void test_sched_time_slice_mutex(void)
   mutex_init(&mutex, MUTEX_ATTR_NON_RECURSIVE);
   task_init(&tasks[0], task_test_sched_time_slice_mutex1, &mutex, stacks[0], STACK_SIZE, 5);
   task_init(&tasks[1], task_test_sched_time_slice_mutex2, &mutex, stacks[1], STACK_SIZE, 5);
-  task_wait(NULL);
-  task_wait(NULL);
-  ut_assert(tasks[0].state == STATE_DEAD);
+
+  // The 2nd task should finish first.
+  struct task * finished = NULL;
+  task_wait(&finished);
+  ut_assert(finished == &tasks[1]);
+  ut_assert(tasks[0].state == STATE_SLEEP);
   ut_assert(tasks[1].state == STATE_DEAD);
+
+  // Wait for the first task to finish.
+  finished = NULL;
+  task_wait(&finished);
+  ut_assert(finished == &tasks[0]);
+  ut_assert(tasks[0].state == STATE_DEAD);
   return;
+}
+
+static __task void * task_test_sched_context_switch_performance(void * arg)
+{
+  volatile bool * stop = (volatile bool*)arg;
+  uint32_t count = 0;
+  while (!*stop) {
+    ++count;
+    task_yield();
+  }
+  return (void*)count;
+}
+
+static void test_sched_context_switch_performance1(void)
+{
+  // A performance test to see how fast we can context switch between
+  // NUM_TASKS equal priority tasks.
+  bool stop = false;
+  for (uint32_t i = 0; i < NUM_TASKS; ++i) {
+    task_init(&tasks[i], task_test_sched_context_switch_performance, &stop, stacks[i], STACK_SIZE, 5);
+  }
+  task_sleep(1);
+  stop = true;
+
+  uint32_t switches = 0;
+  for (uint32_t i = 0; i < NUM_TASKS; ++i) {
+    switches += (uint32_t)task_wait(NULL);
+  }
+
+  // Make sure the performance is in the 99%-110% range of when it was last measured.
+  // In release mode it was last measured at 49458 switches per second (20us/switch).
+#ifdef NDEBUG
+  ut_assert(switches >= 49458 * 99 / 100 && switches <= 49458 * 110 / 100);
+#else
+  ut_assert(switches >= 31496 * 99 / 100 && switches <= 31496 * 110 / 100);
+#endif
+}
+
+static void test_sched_context_switch_performance2(void)
+{
+  // A performance test to see how fast we can context switch between
+  // NUM_TASKS / 2 equal priority tasks and NUM_TASKS / 2 lower priority tasks.
+  bool stop = false;
+  for (uint32_t i = 0; i < NUM_TASKS; ++i) {
+    uint8_t priority = i < NUM_TASKS / 2 ? 5 : 4;
+    task_init(&tasks[i], task_test_sched_context_switch_performance, &stop, stacks[i], STACK_SIZE, priority);
+  }
+  task_sleep(1);
+  stop = true;
+
+  uint32_t switches = 0;
+  for (uint32_t i = 0; i < NUM_TASKS; ++i) {
+    switches += (uint32_t)task_wait(NULL);
+  }
+
+  // Make sure the performance is in the 99%-110% range of when it was last measured.
+  // In release mode it was last measured at 41504 switches per second (24us/switch).
+#ifdef NDEBUG
+  ut_assert(switches >= 41504 * 99 / 100 && switches <= 41504 * 110 / 100);
+#else
+  ut_assert(switches >= 26667 * 99 / 100 && switches <= 26667 * 110 / 100);
+#endif
 }
 
 static void assert_full_time_slice(void)

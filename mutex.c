@@ -27,7 +27,7 @@ void mutex_init(struct mutex * mutex, uint32_t options)
   mutex->owner = NULL;
   mutex->locked = 0;
   mutex->recursive = options & MUTEX_ATTR_RECURSIVE;
-  list_init(&mutex->waiting_tasks);
+  pqueue_init(&mutex->waiting_tasks, pqueue_wait_compare);
 }
 
 void mutex_lock(struct mutex * mutex)
@@ -79,7 +79,7 @@ void mutex_unlock(struct mutex * mutex)
   assert(mutex->locked);
   assert(mutex->owner == running_task);
   kernel_scheduler_disable();
-  if (mutex->locked == 1 && !list_empty(&mutex->waiting_tasks))
+  if (mutex->locked == 1 && !pqueue_empty(&mutex->waiting_tasks))
   {
     // Another task is waiting for this mutex.
     // Let the kernel run to unblock it.

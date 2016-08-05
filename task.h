@@ -75,15 +75,18 @@ struct task
   uint8_t provisioned_priority;
   uint8_t priority;
 
-  // The relationship between blocked tasks is a tree.
-  // Children are blocked on their parent and a parent blocks all its children.
-  // A root node is blocked on nothing.
-  struct tree_head blocked;
+  // The task that we're blocked on.
+  struct task * blocked;
+
+  // The priority queue of tasks that we're blocking.
+  struct pqueue blocking;
+  struct list_head blocking_node;
 
   // The tree that represents the parent/child relationship between tasks.
   struct tree_head family;
 
-  // List node used for whatever this task is waiting for.
+  // The priority queue that we're waiting on.
+  struct pqueue * waiting;
   struct list_head wait_node;
 
   // List node used when a task did a system call that can sleep or timeout.
@@ -128,21 +131,25 @@ struct task
 
 // A task has (un)blocked on this task. This will add/remove the task to the list
 // of blocked tasks and will return true if the tasks priority has changed.
-bool task_add_blocked(struct task * task, struct task * blocked);
-bool task_remove_blocked(struct task * task, struct task * unblocked);
+// TODO Add a version that takes a list/pqueue. These shouldn't be called in a loop (MUTEX).
+void task_add_blocked(struct task * task, struct task * blocked);
+void task_remove_blocked(struct task * task, struct task * unblocked);
 
-// Notifies <task> that the priority of <blocked> has changed.
-bool task_update_blocked(struct task * task, struct task * blocked);
-
-// Reschedule a task. A task needs to be rescheduled after its priority
-// has changed. This should be called whenever task_add_blocked(),
-// task_remove_blocked() or task_update_blocked() returns true.
-void task_reschedule(struct task * task);
+// Start and stop waiting on a priority queue.
+void task_wait_on(struct task * task, struct pqueue * pqueue);
+void task_stop_waiting(struct task * task);
 
 // Destroy a task. Release all allocated resources.
 void task_destroy(struct task * task);
 
 // Perform a sanity check on the task.
 bool task_check(struct task * task);
+
+// Compares the priority of 2 tasks given their wait_nodes.
+bool pqueue_wait_compare(struct list_head * a, struct list_head * b);
+bool pqueue_blocking_compare(struct list_head * a, struct list_head * b);
+
+#define task_from_wait_node(node) container_of((node), struct task, wait_node)
+#define task_from_blocking_node(node) container_of((node), struct task, blocking_node)
 
 #endif

@@ -11,6 +11,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <stddef.h>
+
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 

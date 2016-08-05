@@ -24,7 +24,7 @@ void kernel_scheduler_disable(void);
 void kernel_scheduler_enable(void);
 
 // The list of all ready tasks
-extern struct list_head ready_tasks;
+extern struct pqueue ready_tasks;
 
 // The task that's currently running.
 extern struct task * running_task;

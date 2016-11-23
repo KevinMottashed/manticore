@@ -11,20 +11,9 @@
   NAME context
 
   PUBLIC SaveContext
-  PUBLIC RestoreKernel
-  PUBLIC PendSV_Handler
-  PUBLIC isr_exit_to_kernel
+  PUBLIC RestoreContext
 
-  IMPORT savedStackPointer
-  IMPORT kernelContext
-  IMPORT SysTickCtrlAddr
-
-  SECTION .data : DATA (2)
-  DATA
-isr_exit_to_kernel
-  DC32 0xFFFFFFF9
-isr_exit_to_task
-  DC32 0xFFFFFFFD
+  IMPORT running_task
 
   SECTION .text : CODE (2)
   THUMB
@@ -52,46 +41,15 @@ SaveContext:
   ; The stack pointer includes the equivalent PUSH instructions above.
   MOVS R1, #16
   SUBS R0, R0, R1
-  LDR R1, =savedStackPointer
+  LDR R1, =running_task
   LDR R1, [R1]
   STR R0, [R1]
-
   BX LR
 
-; Change context from an ISR handler back to the kernel.
-; void RestoreKernel(void)
-; NO RETURN
-RestoreKernel:
-  ; Restore R8 - R11
-  POP {R0 - R3}
-  MOV R8, R0
-  MOV R9, R1
-  MOV R10, R2
-  MOV R11, R3
-
-  ; Restore R4 - R7
-  POP {R4 - R7}
-
-  LDR R0, =isr_exit_to_kernel
-  LDR R0, [R0]
-  BX R0
-
-PendSV_Handler:
-  ; Save the kernel context R4 - R11.
-  ; We don't need to save the stack pointer because the kernel uses its own.
-  ; Save R4 - R7
-  PUSH {R4 - R7}
-
-  ; Save R8 - R11
-  MOV R0, R8
-  MOV R1, R9
-  MOV R2, R10
-  MOV R3, R11
-  PUSH {R0 - R3}
-
-  ; Restore the task context.
-  ; Load the task SP.
-  LDR R1, =savedStackPointer
+; void RestoreContext(void)
+RestoreContext:
+  ; Read the stack pointer
+  LDR R1, =running_task
   LDR R1, [R1]
   LDR R0, [R1]
 
@@ -107,18 +65,8 @@ PendSV_Handler:
   ; The following is equivalent to POP {R4-R7} on the process stack.
   LDM R0!, {R4-R7}
 
-  ; Substract 32 bytes from the task SP after restoring R4 - R11.
+  ; Set the process stack pointer.
   MSR PSP, R0
-
-  ; Enable the systick IRQ
-  LDR R0, =SysTickCtrlAddr
-  LDR R0, [R0]
-  MOVS R1, #3
-  STR R1, [R0]
-
-  ; Return to the task context.
-  LDR R0, =isr_exit_to_task
-  LDR R0, [R0]
-  BX R0
+  BX LR
 
   END

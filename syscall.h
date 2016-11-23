@@ -3,7 +3,7 @@
  * "THE BEER-WARE LICENSE" (Revision 42):
  * <kevinmottashed@gmail.com> wrote this file. As long as you retain this notice you
  * can do whatever you want with this stuff. If we meet some day, and you think
- * this stuff is worth it, you can buy me a beer in return. 
+ * this stuff is worth it, you can buy me a beer in return.
  * -Kevin Mottashed
  * ----------------------------------------------------------------------------
  */
@@ -13,7 +13,7 @@
 
 #include <string.h>
 
-#define SYSCALL_NONE          (0) // No syscall was made
+#define SYSCALL_START         (0) // Execute the first task
 #define SYSCALL_YIELD         (1) // Task wishes to yield to another
 #define SYSCALL_SLEEP         (2) // Sleep for x milli seconds
 #define SYSCALL_MUTEX_LOCK    (3) // Failed to lock a mutex
@@ -25,6 +25,7 @@
 #define SYSCALL_TASK_WAIT     (9) // Wait for a task to finish
 
 // Macros to do the system calls
+#define SVC_START()           asm ("SVC #0")
 #define SVC_YIELD()           asm ("SVC #1")
 #define SVC_SLEEP()           asm ("SVC #2")
 #define SVC_MUTEX_LOCK()      asm ("SVC #3")

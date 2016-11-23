@@ -11,44 +11,26 @@
   NAME syscall
 
   PUBLIC SVCall_Handler
-  PUBLIC DisableSysTickIrq
 
   IMPORT SaveContext
-  IMPORT RestoreKernel
-  IMPORT syscallValue
-  IMPORT SysTickCtrlAddr
+  IMPORT RestoreContext
+  IMPORT svc_handle
+  IMPORT running_task
 
   SECTION .data : CONST (2)
 PendStClear
   DC32 0x02000000
-
 ICSR ; Interrupt control and status register
   DC32 0xE000ED04
+isr_exit_to_task
+  DC32 0xFFFFFFFD
 
   SECTION .text : CODE (2)
   THUMB
 
-DisableSysTickIrq:
-  ; Disable the systick IRQ but leave the systick ticking.
-  ; The COUNTFLAG isn't touched.
-  LDR R0, =SysTickCtrlAddr
-  LDR R0, [R0]
-  MOVS R1, #1
-  STR R1, [R0]
-  BX LR
-
-ClearSysTickIrq:
-  ; Clear a pending systick interrupt
-  LDR R0, =ICSR
-  LDR R0, [R0]
-  LDR R1, =PendStClear
-  LDR R1, [R1]
-  STR R1, [R0]
-  BX LR
-
-; Saves the value associated with the SVC instruction.
-; void SaveSVC(void)
-SaveSVC:
+; Returns the value associated with the SVC instruction.
+; uint8_t GetSVC(void)
+GetSVC:
   ; R0 - R1 = Work area
   MRS R0, PSP
   MOVS R1, #0x18
@@ -56,19 +38,26 @@ SaveSVC:
   LDR R0, [R0] ; R0 now points to the instruction after the SVC call
   SUBS R0, R0, #2 ; Move back to the SVC instruction.
   LDRB R0, [R0] ; Read the LSB of the instruction which will be the SVC value.
-  LDR R1, =syscallValue
-  STRB R0, [R1]
   BX LR
 
 SVCall_Handler:
   ; We need to save the task context, save the SVC value and then
-  ; let the kernel handle the system call.
+  ; let handle the system call.
   ; The SysTick IRQ has the same priority as SVC so we don't
   ; need to worry about being preempted and losing the context.
-  BL DisableSysTickIrq
-  BL ClearSysTickIrq
+  MOVS R0, #0
+  LDR R1, =running_task
+  LDR R1, [R1]
+  CMP R1, #0
+  BEQ no_context
   BL SaveContext
-  BL SaveSVC
-  B RestoreKernel
+  BL GetSVC
+no_context:
+  BL svc_handle
+  BL RestoreContext
+
+  LDR R0, =isr_exit_to_task
+  LDR R0, [R0]
+  BX R0
 
   END

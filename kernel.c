@@ -46,20 +46,22 @@ bool kernel_running = false;
 struct pqueue ready_tasks;
 static struct list_head sleeping_tasks;
 
-static void kernel_update_sleep(unsigned int ticks);
 static struct task * get_next_task(struct list_head * list);
 
+__root void systick_handle(void);
+
 // Handle the various system calls
-static void kernel_handle_syscall(uint8_t value);
-static void kernel_handle_yield(void);
-static void kernel_handle_sleep(void);
-static void kernel_handle_mutex_lock(void);
-static void kernel_handle_mutex_unlock(void);
-static void kernel_handle_channel_send(void);
-static void kernel_handle_channel_recv(void);
-static void kernel_handle_channel_reply(void);
-static void kernel_handle_task_return(void);
-static void kernel_handle_task_wait(void);
+__root void svc_handle(uint8_t value);
+static void svc_handle_start(void);
+static void svc_handle_yield(void);
+static void svc_handle_sleep(void);
+static void svc_handle_mutex_lock(void);
+static void svc_handle_mutex_unlock(void);
+static void svc_handle_channel_send(void);
+static void svc_handle_channel_recv(void);
+static void svc_handle_channel_reply(void);
+static void svc_handle_task_return(void);
+static void svc_handle_task_wait(void);
 
 // Internal OS tasks
 #pragma data_alignment = 8
@@ -82,113 +84,22 @@ void manticore_init(void)
   pqueue_init(&ready_tasks, pqueue_wait_compare);
   list_init(&sleeping_tasks);
 
-  // Create the init task and set it as the initial running task.
+  // Create the init and idle tasks.
+  // Pretend that the init task is running so that it becomes the parent
+  // for future tasks.
   task_init(&init_task, kernel_task_init, NULL, init_task_stack, sizeof(init_task_stack), 1);
-  init_task.state = STATE_RUNNING;
   running_task = &init_task;
-  task_stop_waiting(&init_task);
-
-  // Create the idle task.
   task_init(&idle_task, kernel_task_idle, NULL, idle_task_stack, sizeof(idle_task_stack), 0);
 }
 
 void manticore_main(void)
 {
+  running_task = NULL;
   kernel_running = true;
-  uint32_t kernel_context_ticks = 0;
-
-  while (true)
-  {
-    // Figure out how much time was actually spent in task context.
-    uint32_t load = SysTick->LOAD;
-    uint32_t task_context_ticks = load - SysTick->VAL;
-    uint32_t task_leftover_ticks = SysTick->VAL;
-    bool task_finished_time_slice = SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk;
-    if (task_finished_time_slice)
-    {
-      task_context_ticks += SysTick->LOAD;
-    }
-
-    // The systick is now used to time how long we spend in the kernel.
-    SysTick->LOAD = MAX_SYSTICK_RELOAD;
-    SysTick->VAL = 0;
-
-    assert(task_check(running_task));
-
-    // Update how much time is left for each sleeping task to wake up.
-    kernel_update_sleep(task_context_ticks + kernel_context_ticks);
-
-    // Handle the system call.
-    kernel_handle_syscall(syscallValue);
-    syscallValue = SYSCALL_NONE;
-
-    // This is a priority round-robin scheduler. The highest
-    // priority ready task will always run next and will never yield to
-    // a lower priority task. The next task to run is the one at
-    // the front of the priority queue.
-    struct task * next_task = task_from_wait_node(pqueue_peek(&ready_tasks));
-    task_stop_waiting(next_task);
-
-    // We now know the next task that will run. We need to find out if
-    // there's a sleeping task that needs to wakeup before the time slice expires.
-    uint32_t task_ticks = MAX_SYSTICK_RELOAD;
-
-    // Have a peek at the next ready task. We need to use a time slice
-    // if the next task has the same priority as the task we're about
-    // to run. This ensures the CPU is shared between all the
-    // highest priority tasks.
-    if (!pqueue_empty(&ready_tasks) && task_from_wait_node(pqueue_peek(&ready_tasks))->priority == next_task->priority)
-    {
-      // In the case where a task is being scheduled 2x in a row then
-      // we'll finish the time slice instead of starting a new one.
-      if (next_task == running_task && !task_finished_time_slice)
-      {
-        task_ticks = task_leftover_ticks;
-      }
-      else
-      {
-        task_ticks = TIME_SLICE_TICKS;
-      }
-    }
-
-    struct list_head * node;
-    list_for_each(node, &sleeping_tasks)
-    {
-      struct task * t = container_of(node, struct task, sleep_node);
-      if (t->priority > next_task->priority)
-      {
-        // A higher priority sleeping task can reduce the ticks
-        // to less than the time slice.
-        task_ticks = MIN(task_ticks, t->sleep);
-      }
-      else if (t->priority == next_task->priority)
-      {
-        // An equal priority sleeping task can reduce the ticks
-        // but still needs to respect the time slice or leftover time slice.
-        task_ticks = MIN(task_ticks, MAX(TIME_SLICE_TICKS, t->sleep));
-      }
-    }
-
-    // We have a task to schedule.
-    running_task = next_task;
-    running_task->state = STATE_RUNNING;
-    savedStackPointer = &running_task->stack_pointer;
-
-    // Remember the amount of time spent in the kernel.
-    kernel_context_ticks = MAX_SYSTICK_RELOAD - SysTick->VAL;
-
-    // Load the systick timer. The IRQ will be reenabled in the PendSV handler.
-    SysTick->LOAD = task_ticks;
-    SysTick->VAL = 0;
-
-    // Trigger a PendSV interrupt to return to task context.
-    SCB->ICSR = SCB_ICSR_PENDSVSET_Msk;
-    __DSB();
-    __ISB();
-  }
+  SVC_START();
 }
 
-void kernel_update_sleep(unsigned int ticks)
+static void update_sleep_ticks(uint32_t ticks)
 {
   // Iterate through all the tasks to update the sleep time left.
   struct list_head * node;
@@ -236,44 +147,126 @@ static struct task * get_next_task(struct list_head * list)
   return next_task;
 }
 
-void kernel_handle_syscall(uint8_t value)
+static void schedule(void)
+{
+  // Update how many ticks are left before the sleeping tasks wake up.
+  uint32_t systick_load = SysTick->LOAD;
+  uint32_t systick_val = SysTick->VAL;
+  bool systick_fired = SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk;
+  uint32_t ticks = systick_load - systick_val;
+  if (systick_fired)
+    ticks += systick_load;
+  update_sleep_ticks(ticks);
+
+  // This is a priority round-robin scheduler. The highest
+  // priority ready task will always run next and will never yield to
+  // a lower priority task. The next task to run is the one at
+  // the front of the priority queue.
+  struct task * next_task = task_from_wait_node(pqueue_peek(&ready_tasks));
+  task_stop_waiting(next_task);
+
+  // We now know the next task that will run. We need to find out if
+  // there's a blocked task that needs to wakeup before the time slice expires.
+  uint32_t task_ticks = MAX_SYSTICK_RELOAD;
+
+  // Have a peek at the next ready task. We need to use a time slice
+  // if the next task has the same priority as the task we're about
+  // to run. This ensures the CPU is shared between all the
+  // highest priority tasks.
+  if (!pqueue_empty(&ready_tasks) && task_from_wait_node(pqueue_peek(&ready_tasks))->priority == next_task->priority)
+  {
+    if (next_task == running_task && !systick_fired)
+      task_ticks = MIN(TIME_SLICE_TICKS, systick_val);
+    else
+      task_ticks = TIME_SLICE_TICKS;
+  }
+  running_task = next_task;
+
+  // We need to check the sleeping tasks to see if one could wake us up early.
+  struct list_head * node;
+  list_for_each(node, &sleeping_tasks)
+  {
+    struct task * t = container_of(node, struct task, sleep_node);
+    if (t->priority > next_task->priority)
+    {
+      // A higher priority sleeping task can reduce the ticks
+      // to less than the time slice.
+      task_ticks = MIN(task_ticks, t->sleep);
+    }
+    else if (t->priority == next_task->priority)
+    {
+      // An equal priority sleeping task can reduce the ticks
+      // but still needs to respect the time slice or leftover time slice.
+      task_ticks = MIN(task_ticks, MAX(TIME_SLICE_TICKS, t->sleep));
+    }
+  }
+
+  // Setup the SysTick timer.
+  // We also clear the IRQ if it fired while we were
+  // handling the system call.
+  SysTick->CTRL = SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk;
+  SysTick->LOAD = task_ticks;
+  SysTick->VAL = 0;
+  SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;
+  __DSB();
+  __ISB();
+}
+
+void systick_handle(void)
+{
+  svc_handle_yield();
+  schedule();
+}
+
+void svc_handle(uint8_t value)
 {
   switch (value)
   {
-  case SYSCALL_NONE:
+  case SYSCALL_START:
+    svc_handle_start();
+    break;
   case SYSCALL_YIELD:
-    kernel_handle_yield();
+    svc_handle_yield();
     break;
   case SYSCALL_SLEEP:
-    kernel_handle_sleep();
+    svc_handle_sleep();
     break;
   case SYSCALL_MUTEX_LOCK:
-    kernel_handle_mutex_lock();
+    svc_handle_mutex_lock();
     break;
   case SYSCALL_MUTEX_UNLOCK:
-    kernel_handle_mutex_unlock();
+    svc_handle_mutex_unlock();
     break;
   case SYSCALL_CHANNEL_SEND:
-    kernel_handle_channel_send();
+    svc_handle_channel_send();
     break;
   case SYSCALL_CHANNEL_RECV:
-    kernel_handle_channel_recv();
+    svc_handle_channel_recv();
     break;
   case SYSCALL_CHANNEL_REPLY:
-    kernel_handle_channel_reply();
+    svc_handle_channel_reply();
     break;
   case SYSCALL_TASK_RETURN:
-    kernel_handle_task_return();
+    svc_handle_task_return();
     break;
   case SYSCALL_TASK_WAIT:
-    kernel_handle_task_wait();
+    svc_handle_task_wait();
     break;
   default:
     assert(false);
   }
+  schedule();
+  return;
 }
 
-void kernel_handle_yield(void)
+void svc_handle_start(void)
+{
+  SysTick->LOAD = MAX_SYSTICK_RELOAD;
+  SysTick->VAL = 0;
+  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk;
+}
+
+void svc_handle_yield(void)
 {
   // There's nothing special to do here. One of the following occured:
   // 1. The time slice expired.
@@ -284,14 +277,14 @@ void kernel_handle_yield(void)
   task_wait_on(running_task, &ready_tasks);
 }
 
-void kernel_handle_sleep(void)
+void svc_handle_sleep(void)
 {
   running_task->state = STATE_SLEEP;
   running_task->sleep *= SYSTICK_RELOAD_MS;
   list_push_back(&sleeping_tasks, &running_task->sleep_node);
 }
 
-void kernel_handle_mutex_lock(void)
+void svc_handle_mutex_lock(void)
 {
   struct mutex * mutex = running_task->mutex;
   assert(mutex != NULL);
@@ -311,7 +304,7 @@ void kernel_handle_mutex_lock(void)
   }
 }
 
-void kernel_handle_mutex_unlock(void)
+void svc_handle_mutex_unlock(void)
 {
   struct mutex * mutex = running_task->mutex;
   assert(mutex != NULL);
@@ -326,7 +319,6 @@ void kernel_handle_mutex_unlock(void)
 
   // Boths tasks are ready after the mutex is unlocked.
   // The running task is scheduled first so that it can finish its time slice.
-  // FIXME It will actually start a new time slice instead.
   running_task->state = STATE_READY;
   new_owner->state = STATE_READY;
   task_wait_on(running_task, &ready_tasks);
@@ -346,7 +338,7 @@ void kernel_handle_mutex_unlock(void)
   }
 }
 
-void kernel_handle_channel_send(void)
+void svc_handle_channel_send(void)
 {
   // Save the message and channel
   struct channel * channel = running_task->channel;
@@ -380,7 +372,7 @@ void kernel_handle_channel_send(void)
   }
 }
 
-void kernel_handle_channel_recv(void)
+void svc_handle_channel_recv(void)
 {
   struct task * send = get_next_task(&running_task->channel->waiting_tasks);
   if (send != NULL)
@@ -414,7 +406,7 @@ void kernel_handle_channel_recv(void)
   }
 }
 
-void kernel_handle_channel_reply(void)
+void svc_handle_channel_reply(void)
 {
   struct channel * channel = running_task->channel;
   void * msg = running_task->channel_msg;
@@ -441,7 +433,7 @@ void kernel_handle_channel_reply(void)
   task_remove_blocked(running_task, reply_task);
 }
 
-void kernel_handle_task_return(void)
+void svc_handle_task_return(void)
 {
   // When a task returns there should be exactly 0 or 1 tasks blocked on it.
   // If there's a task blocked on this task then it should be in the wait state.
@@ -486,7 +478,7 @@ void kernel_handle_task_return(void)
   }
 }
 
-void kernel_handle_task_wait(void)
+void svc_handle_task_wait(void)
 {
   // It makes no sense to call wait when we have no children.
   assert(tree_num_children(&running_task->family) > 0);

@@ -12,7 +12,7 @@
 
   SECTION CSTACK : DATA : NOROOT (3)
 
-  ; Handlers are defined as week so that they can be overloaded
+  ; Handlers are defined as weak so that they can be overloaded
   PUBWEAK Reset_Handler
   PUBWEAK NMI_Handler
   PUBWEAK HardFault_Handler

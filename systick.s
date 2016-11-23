@@ -13,34 +13,19 @@
   PUBLIC SysTick_Handler
 
   IMPORT SaveContext
-  IMPORT RestoreKernel
-  IMPORT DisableSysTickIrq
-  IMPORT isr_exit_to_kernel
-
-  SECTION .data : CONST(2)
-  PUBLIC SysTickCtrlAddr
-  DATA
-SysTickCtrlAddr
-  DC32 0xE000E010
+  IMPORT systick_handle
+  IMPORT RestoreContext
 
   SECTION .text : CODE (2)
   THUMB
 
 SysTick_Handler:
-  ; The systick handler only needs to save the task context
-  ; and then let the kernel take over.
-  ; Sometimes there's no task context to save. This happens
-  ; when the systick expires in the PendSV handler. This interrupt
-  ; is tail chained from the PendSV handler so we never entered task context.
-  ; Bit 3 in the LR register tells us if it's tail chained or not.
-  MOVS R0, #8
-  MOV R1, LR
-  TST R0, R1
-  BEQ no_context_save
+  ; Save the context then handle the context switch.
+  ; Restore the context of the next task and return to user land.
+  PUSH {R0, LR}
   BL SaveContext
-no_context_save:
-  BL DisableSysTickIrq
-  LDR R0, =RestoreKernel
-  BX R0
+  BL systick_handle
+  BL RestoreContext
+  POP {R0, PC}
 
   END

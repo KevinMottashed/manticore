@@ -958,11 +958,11 @@ static void test_sched_context_switch_performance1(void)
   }
 
   // Make sure the performance is in the 99%-110% range of when it was last measured.
-  // In release mode it was last measured at 49458 switches per second (20us/switch).
+  // In release mode it was last measured at 93017 switches per second (10.7us/switch).
 #ifdef NDEBUG
-  ut_assert(switches >= 49458 * 99 / 100 && switches <= 49458 * 110 / 100);
+  ut_assert(switches >= 93017 * 99 / 100 && switches <= 93017 * 110 / 100);
 #else
-  ut_assert(switches >= 31496 * 99 / 100 && switches <= 31496 * 110 / 100);
+  ut_assert(switches >= 63732 * 99 / 100 && switches <= 63732 * 110 / 100);
 #endif
 }
 
@@ -984,11 +984,11 @@ static void test_sched_context_switch_performance2(void)
   }
 
   // Make sure the performance is in the 99%-110% range of when it was last measured.
-  // In release mode it was last measured at 41504 switches per second (24us/switch).
+  // In release mode it was last measured at 41504 switches per second (14.7us/switch).
 #ifdef NDEBUG
-  ut_assert(switches >= 41504 * 99 / 100 && switches <= 41504 * 110 / 100);
+  ut_assert(switches >= 68368 * 99 / 100 && switches <= 68368 * 110 / 100);
 #else
-  ut_assert(switches >= 26667 * 99 / 100 && switches <= 26667 * 110 / 100);
+  ut_assert(switches >= 46638 * 99 / 100 && switches <= 46638 * 110 / 100);
 #endif
 }
 

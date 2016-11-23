@@ -45,19 +45,11 @@ SVCall_Handler:
   ; let handle the system call.
   ; The SysTick IRQ has the same priority as SVC so we don't
   ; need to worry about being preempted and losing the context.
-  MOVS R0, #0
-  LDR R1, =running_task
-  LDR R1, [R1]
-  CMP R1, #0
-  BEQ no_context
+  PUSH {R0, LR}
   BL SaveContext
   BL GetSVC
-no_context:
   BL svc_handle
   BL RestoreContext
-
-  LDR R0, =isr_exit_to_task
-  LDR R0, [R0]
-  BX R0
+  POP {R0, PC}
 
   END

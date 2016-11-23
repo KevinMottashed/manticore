@@ -12,10 +12,11 @@
 
 static void task_return(void * result);
 
-void task_init(struct task * task, task_entry_t entry, void * arg, void * stack, uint32_t stackSize, uint8_t priority)
+void task_init(struct task * task, task_entry_t entry, void * arg, void * stack, uint32_t stack_size, uint8_t priority)
 {
   assert(stack != NULL);
-  assert(stackSize >= sizeof(struct context));
+  assert(((uintptr_t)stack & 7) == 0); // The stack must be 8 byte aligned.
+  assert(stack_size >= sizeof(struct context));
 
   if (kernel_running)
   {
@@ -28,8 +29,7 @@ void task_init(struct task * task, task_entry_t entry, void * arg, void * stack,
   task->state = STATE_READY;
   task->provisioned_priority = priority;
   task->priority = priority;
-  task->stack_pointer = (uint32_t)stack + stackSize;
-  task->stack_pointer &= ~0x7u; // The stack must be 8 byte aligned.
+  task->stack_pointer = (uint32_t)stack + stack_size;
   task->stack_pointer -= sizeof(struct context);
   task->stack = stack;
   *(uint32_t*)task->stack = TASK_STACK_MAGIC;

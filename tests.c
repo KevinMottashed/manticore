@@ -984,7 +984,7 @@ static void test_sched_context_switch_performance2(void)
   }
 
   // Make sure the performance is in the 99%-110% range of when it was last measured.
-  // In release mode it was last measured at 41504 switches per second (14.7us/switch).
+  // In release mode it was last measured at 68368 switches per second (14.7us/switch).
 #ifdef NDEBUG
   ut_assert(switches >= 68368 * 99 / 100 && switches <= 68368 * 110 / 100);
 #else

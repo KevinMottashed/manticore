@@ -13,7 +13,7 @@
 
 #include <string.h>
 
-#define SYSCALL_START         (0) // Execute the first task
+#define SYSCALL_NONE          (0) // No system call was executed
 #define SYSCALL_YIELD         (1) // Task wishes to yield to another
 #define SYSCALL_SLEEP         (2) // Sleep for x milli seconds
 #define SYSCALL_MUTEX_LOCK    (3) // Failed to lock a mutex
@@ -25,7 +25,6 @@
 #define SYSCALL_TASK_WAIT     (9) // Wait for a task to finish
 
 // Macros to do the system calls
-#define SVC_START()           asm ("SVC #0")
 #define SVC_YIELD()           asm ("SVC #1")
 #define SVC_SLEEP()           asm ("SVC #2")
 #define SVC_MUTEX_LOCK()      asm ("SVC #3")

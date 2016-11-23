@@ -37,9 +37,6 @@
 // The number of SysTick ticks in a time slice
 #define TIME_SLICE_TICKS (TIME_SLICE_MS * SYSTICK_RELOAD_MS)
 
-volatile uint8_t syscallValue;
-volatile uint32_t * savedStackPointer;
-
 struct task * running_task = NULL;
 bool kernel_running = false;
 
@@ -52,7 +49,6 @@ __root void systick_handle(void);
 
 // Handle the various system calls
 __root void svc_handle(uint8_t value);
-static void svc_handle_start(void);
 static void svc_handle_yield(void);
 static void svc_handle_sleep(void);
 static void svc_handle_mutex_lock(void);
@@ -73,6 +69,7 @@ static struct task idle_task;
 static struct task init_task;
 static __task void * kernel_task_idle(void * arg);
 static __task void * kernel_task_init(void * arg);
+static void schedule(void);
 
 void manticore_init(void)
 {
@@ -96,7 +93,57 @@ void manticore_main(void)
 {
   running_task = NULL;
   kernel_running = true;
-  SVC_START();
+
+  // Figure out which task will run first.
+  // Technically the SysTick is running at this point so the first task
+  // will lose a bit of its time slice. The amount should be negligable.
+  schedule();
+
+  // Remove the saved context from the tasks stack.
+  struct context * context = (struct context*)running_task->stack_pointer;
+  running_task->stack_pointer += sizeof(*context);
+
+  // Set the process stack pointer.
+  __set_PSP(running_task->stack_pointer);
+
+  // Save the tasks R0, LR and PC in registers.
+  register uint32_t r0 = context->R0;
+  register uint32_t lr = context->LR;
+  register uint32_t pc = context->PC;
+
+  // Switch to using the process stack.
+  __set_CONTROL(0x2);
+  __ISB();
+
+  // Reset the main stack pointer to what it was at power on to reclaim space.
+  extern uint32_t __vector_table;
+  __set_MSP(__vector_table);
+
+  // Push the argument and PC so that we can jump to the task later.
+  // 2 PUSH instructions are used in case pc/r0 aren't in the right order.
+  asm("PUSH {%[pc]}" : : [pc] "r" (pc));
+  asm("PUSH {%[r0]}" : : [r0] "r" (r0));
+
+  // Set LR to the task's exit function and set everything else to 0.
+  // I don't think anything requires all registers be set to zero but
+  // it happens for all tasks
+  asm("MOV LR, %[lr]" : : [lr] "r" (lr));
+  asm("MOVS R1, #0");
+  asm("MOVS R2, #0");
+  asm("MOVS R3, #0");
+  asm("MOVS R4, #0");
+  asm("MOVS R5, #0");
+  asm("MOVS R6, #0");
+  asm("MOVS R7, #0");
+  asm("MOV R8, R1");
+  asm("MOV R9, R1");
+  asm("MOV R10, R1");
+  asm("MOV R11, R1");
+  asm("MOV R12, R1");
+
+  // Pop the argument and PC to jump to the task.
+  asm("POP {R0, PC}");
+  assert(false);
 }
 
 static void update_sleep_ticks(uint32_t ticks)
@@ -222,9 +269,6 @@ void svc_handle(uint8_t value)
 {
   switch (value)
   {
-  case SYSCALL_START:
-    svc_handle_start();
-    break;
   case SYSCALL_YIELD:
     svc_handle_yield();
     break;
@@ -257,13 +301,6 @@ void svc_handle(uint8_t value)
   }
   schedule();
   return;
-}
-
-void svc_handle_start(void)
-{
-  SysTick->LOAD = MAX_SYSTICK_RELOAD;
-  SysTick->VAL = 0;
-  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk;
 }
 
 void svc_handle_yield(void)

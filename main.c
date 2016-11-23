@@ -24,6 +24,7 @@ static __task void * task_run_all_tests(void * arg);
 #define STACK_SIZE (256)
 #pragma data_alignment = 8
 static uint8_t stack[STACK_SIZE];
+struct task test_task;
 
 __task void * task_run_all_tests(void * arg)
 {
@@ -50,8 +51,7 @@ int main()
   manticore_init();
 
   // Create the task that will drive the tests.
-  struct task task;
-  task_init(&task, task_run_all_tests, NULL, stack, STACK_SIZE, 10);
+  task_init(&test_task, task_run_all_tests, NULL, stack, STACK_SIZE, 10);
 
   // Start the kernel.
   manticore_main();

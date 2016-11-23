@@ -1895,7 +1895,13 @@
     <name>$PROJ_DIR$\channel.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\channel.h</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\clock.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\clock.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\context.s</name>
@@ -1904,16 +1910,31 @@
     <name>$PROJ_DIR$\gpio.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\gpio.h</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\kernel.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\kernel.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\list.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\list.h</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\main.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\manticore.h</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\mutex.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\mutex.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\pqueue.c</name>
@@ -1922,7 +1943,13 @@
     <name>$PROJ_DIR$\pqueue.h</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\syscall.h</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\syscall_isr.s</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\system.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\systick.s</name>
@@ -1940,7 +1967,16 @@
     <name>$PROJ_DIR$\tests.c</name>
   </file>
   <file>
+    <name>$PROJ_DIR$\tests.h</name>
+  </file>
+  <file>
     <name>$PROJ_DIR$\tree.c</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\tree.h</name>
+  </file>
+  <file>
+    <name>$PROJ_DIR$\utils.h</name>
   </file>
   <file>
     <name>$PROJ_DIR$\vector_table.s</name>
